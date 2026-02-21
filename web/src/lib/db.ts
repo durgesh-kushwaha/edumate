@@ -1,11 +1,14 @@
 import { Binary, MongoClient, ObjectId } from 'mongodb';
-import { DEPARTMENTS, DEFAULT_PASSWORD, DESIGNATION_SALARY_DEFAULTS, SUPERADMIN_EMAIL, SUPERADMIN_NAME, SUPERADMIN_PASSWORD } from './catalog';
+import { DEPARTMENTS, DEFAULT_PASSWORD, DESIGNATION_SALARY_DEFAULTS } from './catalog';
 import { hashPassword } from './auth';
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017';
 const MONGODB_DB = process.env.MONGODB_DB || 'eduvision_nexus_v2';
-const APP_SETUP_VERSION = 4;
+const APP_SETUP_VERSION = 5;
 const APP_SETUP_DOC_ID = 'edumate-web-setup';
+const SUPERADMIN_SEED_EMAIL = (process.env.SEED_SUPERADMIN_EMAIL || 'superadmin@edumate.local').trim().toLowerCase();
+const SUPERADMIN_SEED_PASSWORD = process.env.SEED_SUPERADMIN_PASSWORD || DEFAULT_PASSWORD;
+const SUPERADMIN_SEED_NAME = (process.env.SEED_SUPERADMIN_NAME || 'Default Superadmin').trim();
 
 const globalForMongo = globalThis as unknown as {
   mongoClient?: MongoClient;
@@ -154,14 +157,14 @@ async function ensureIndexes() {
 async function ensureDefaultUsersAndData() {
   const db = await getDb();
 
-  const superadmin = await db.collection('users').findOne({ email: SUPERADMIN_EMAIL });
+  const superadmin = await db.collection('users').findOne({ email: SUPERADMIN_SEED_EMAIL });
   let superadminId = superadmin?._id;
   if (!superadmin) {
     const inserted = await db.collection('users').insertOne({
-      email: SUPERADMIN_EMAIL,
-      hashed_password: hashPassword(SUPERADMIN_PASSWORD),
+      email: SUPERADMIN_SEED_EMAIL,
+      hashed_password: hashPassword(SUPERADMIN_SEED_PASSWORD),
       role: 'superadmin',
-      full_name: SUPERADMIN_NAME,
+      full_name: SUPERADMIN_SEED_NAME,
       is_active: true,
       created_at: now(),
       updated_at: now(),
@@ -173,8 +176,8 @@ async function ensureDefaultUsersAndData() {
       {
         $set: {
           role: 'superadmin',
-          full_name: SUPERADMIN_NAME,
-          hashed_password: hashPassword(SUPERADMIN_PASSWORD),
+          full_name: SUPERADMIN_SEED_NAME,
+          hashed_password: hashPassword(SUPERADMIN_SEED_PASSWORD),
           is_active: true,
           updated_at: now(),
         },
@@ -183,7 +186,7 @@ async function ensureDefaultUsersAndData() {
     superadminId = superadmin._id;
   }
   if (superadminId) {
-    await upsertCredentialVault(db, superadminId, SUPERADMIN_PASSWORD);
+    await upsertCredentialVault(db, superadminId, SUPERADMIN_SEED_PASSWORD);
   }
 
   const admin = await db.collection('users').findOne({ email: 'admin@eduvision.com' });

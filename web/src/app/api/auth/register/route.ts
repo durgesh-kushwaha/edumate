@@ -1,8 +1,10 @@
 import { NextRequest } from 'next/server';
 import { hashPassword } from '@/lib/auth';
-import { DEPARTMENTS, SUPERADMIN_EMAIL } from '@/lib/catalog';
+import { DEPARTMENTS } from '@/lib/catalog';
 import { ensureDbSetup, getDb } from '@/lib/db';
 import { jsonError, jsonOk } from '@/lib/http';
+
+const RESERVED_SUPERADMIN_EMAIL = (process.env.SEED_SUPERADMIN_EMAIL || 'superadmin@edumate.local').trim().toLowerCase();
 
 function validDepartment(value: string) {
   return DEPARTMENTS.some((item) => item.name === value);
@@ -48,7 +50,7 @@ export async function POST(request: NextRequest) {
     if (!email || !password || !fullName) {
       return jsonError('Name, email and password are required', 400);
     }
-    if (email === SUPERADMIN_EMAIL.toLowerCase()) {
+    if (email === RESERVED_SUPERADMIN_EMAIL) {
       return jsonError('This email is reserved for superadmin account', 400);
     }
     if (role !== 'student') {

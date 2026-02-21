@@ -157,8 +157,4 @@ export const PINCODE_FALLBACK: Record<string, { state: string; city: string }> =
   '700001': { state: 'West Bengal', city: 'Kolkata' },
   '500001': { state: 'Telangana', city: 'Hyderabad' },
 };
-
-export const SUPERADMIN_EMAIL = 'durgeshcgc@gmail.com';
-export const SUPERADMIN_PASSWORD = 'Pass@1234';
-export const SUPERADMIN_NAME = 'Durgesh Kushwaha';
 export const DEFAULT_PASSWORD = 'Pass@1234';

@@ -105,6 +105,9 @@ npm run build
 MONGODB_URI=mongodb://127.0.0.1:27017
 MONGODB_DB=eduvision_nexus_v2
 JWT_SECRET=replace_with_long_random_secret
+SEED_SUPERADMIN_EMAIL=superadmin@edumate.local
+SEED_SUPERADMIN_PASSWORD=replace_with_secret_password
+SEED_SUPERADMIN_NAME=Default Superadmin
 PY_ATTENDANCE_URL=http://127.0.0.1:8010
 PY_ATTENDANCE_TIMEOUT_MS=15000
 ```
@@ -115,6 +118,9 @@ Production example:
 MONGODB_URI=mongodb+srv://<db_user>:<db_password>@<cluster>.mongodb.net/eduvision_nexus_v2?retryWrites=true&w=majority
 MONGODB_DB=eduvision_nexus_v2
 JWT_SECRET=<long_random_secret_64_plus_chars>
+SEED_SUPERADMIN_EMAIL=<superadmin_email>
+SEED_SUPERADMIN_PASSWORD=<superadmin_password>
+SEED_SUPERADMIN_NAME=<superadmin_name>
 PY_ATTENDANCE_URL=https://<your-attendance-service-domain>
 PY_ATTENDANCE_TIMEOUT_MS=15000
 ```
@@ -139,15 +145,13 @@ FACE_MATCH_THRESHOLD=0.58
 
 On first run, seed/setup creates required base data and users.
 
-Default accounts:
-- Superadmin: `durgeshcgc@gmail.com / Pass@1234` (Durgesh Kushwaha)
-- Admin: `admin@eduvision.com / Pass@1234`
-- Faculty:
-  - `teacher@eduvision.com / Pass@1234`
-  - `teacher2@eduvision.com / Pass@1234`
-  - `teacher3@eduvision.com / Pass@1234`
-  - `teacher4@eduvision.com / Pass@1234`
-- Student: `student@eduvision.com / Pass@1234`
+Credential policy:
+- No real credential values are stored in this README.
+- Superadmin seed account is created from environment variables:
+  - `SEED_SUPERADMIN_EMAIL`
+  - `SEED_SUPERADMIN_PASSWORD`
+  - `SEED_SUPERADMIN_NAME`
+- Non-production sample accounts are seeded only for local/demo use.
 
 Seed behavior highlights:
 - Student sample data is constrained to semester 4 (year 2)
