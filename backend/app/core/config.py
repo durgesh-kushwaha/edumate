@@ -7,10 +7,17 @@ class Settings(BaseSettings):
     APP_NAME: str = 'EduVision Nexus API'
     API_V1_PREFIX: str = '/api/v1'
     DEBUG: bool = False
-    SECRET_KEY: str
+    SECRET_KEY: str = 'change-me-in-production'
     ALGORITHM: str = 'HS256'
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
-    DATABASE_URL: str
+    MONGODB_URI: str = 'mongodb://localhost:27017/eduvision_nexus'
+    MONGODB_DB: str = 'eduvision_nexus'
+    RAZORPAY_PAYMENT_LINK_BASE: str = 'https://razorpay.me/zavraq'
+    SUPERADMIN_EMAIL: str = 'durgesh@zavraq.com'
+    FACE_REGISTRY_DIR: str = 'storage/face_registry'
+    ASSIGNMENTS_DIR: str = 'storage/assignments'
+    SUBMISSIONS_DIR: str = 'storage/submissions'
+    FACE_REGISTRATION_MIN_IMAGES: int = 4
     CORS_ORIGINS: str = 'http://localhost:5173'
 
     @property

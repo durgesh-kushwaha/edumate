@@ -10,7 +10,7 @@ import requests
 
 API_BASE = os.getenv('API_BASE', 'http://localhost:8000/api/v1')
 API_TOKEN = os.getenv('AI_API_TOKEN', '')
-COURSE_ID = int(os.getenv('COURSE_ID', '1'))
+COURSE_ID = os.getenv('COURSE_ID', '')
 HEADERS = {'Authorization': f'Bearer {API_TOKEN}'}
 
 
@@ -21,7 +21,9 @@ def fetch_face_encodings():
     return [item['student_id'] for item in data], [np.array(item['encoding']) for item in data]
 
 
-def mark_attendance(student_id: int):
+def mark_attendance(student_id: str):
+    if not COURSE_ID:
+        raise RuntimeError('Set COURSE_ID to a valid MongoDB course id before running attendance engine.')
     payload = {
         'student_id': student_id,
         'course_id': COURSE_ID,
@@ -72,7 +74,7 @@ def run():
             label = 'Unknown'
             color = (0, 0, 255)
             if student_id is not None:
-                label = f'ID {student_id}'
+                label = f'ID {student_id[-6:]}'
                 color = (0, 255, 0)
                 if student_id not in processed_ids:
                     try:

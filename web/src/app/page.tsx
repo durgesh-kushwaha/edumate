@@ -58,6 +58,9 @@ const EMPTY_STUDENT_SELF_FORM = {
   city: '',
 };
 
+const ATTENDANCE_WARMUP_SESSION_KEY = 'edumate_attendance_warmup_at';
+const ATTENDANCE_WARMUP_COOLDOWN_MS = 15 * 60 * 1000;
+
 async function apiJson<T = Dict>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { credentials: 'include', ...init });
   const contentType = response.headers.get('content-type') || '';
@@ -69,6 +72,27 @@ async function apiJson<T = Dict>(url: string, init?: RequestInit): Promise<T> {
   }
 
   return body as T;
+}
+
+function warmAttendanceService() {
+  if (typeof window === 'undefined') return;
+  try {
+    const previousWarmup = Number(window.sessionStorage.getItem(ATTENDANCE_WARMUP_SESSION_KEY) || 0);
+    const now = Date.now();
+    if (now - previousWarmup < ATTENDANCE_WARMUP_COOLDOWN_MS) {
+      return;
+    }
+    window.sessionStorage.setItem(ATTENDANCE_WARMUP_SESSION_KEY, String(now));
+  } catch {
+    // Ignore storage issues and still try a one-off warmup call.
+  }
+
+  void fetch('/api/attendance/warmup', {
+    method: 'POST',
+    credentials: 'include',
+    cache: 'no-store',
+    keepalive: true,
+  }).catch(() => null);
 }
 
 async function lookupPincode(pincode: string) {
@@ -3929,6 +3953,7 @@ export default function HomePage() {
   }
 
   useEffect(() => {
+    warmAttendanceService();
     boot();
   }, []);
 

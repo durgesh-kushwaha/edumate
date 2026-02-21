@@ -1,16 +1,15 @@
 import logging
+from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.v1.endpoints import auth, admin, teacher, student, attendance
+from app.api.v1.endpoints import account, admin, attendance, auth, catalog, student, teacher
 from app.core.config import settings
-from app.db.session import engine, Base
+from app.db.mongo import setup_indexes
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
 logger = logging.getLogger(__name__)
-
-Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title=settings.APP_NAME, debug=settings.DEBUG)
 app.add_middleware(
@@ -40,8 +39,18 @@ app.include_router(admin.router, prefix=settings.API_V1_PREFIX)
 app.include_router(teacher.router, prefix=settings.API_V1_PREFIX)
 app.include_router(student.router, prefix=settings.API_V1_PREFIX)
 app.include_router(attendance.router, prefix=settings.API_V1_PREFIX)
+app.include_router(catalog.router, prefix=settings.API_V1_PREFIX)
+app.include_router(account.router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get('/health')
 def health_check():
     return {'status': 'ok'}
+
+
+@app.on_event('startup')
+def startup_event():
+    Path(settings.FACE_REGISTRY_DIR).mkdir(parents=True, exist_ok=True)
+    Path(settings.ASSIGNMENTS_DIR).mkdir(parents=True, exist_ok=True)
+    Path(settings.SUBMISSIONS_DIR).mkdir(parents=True, exist_ok=True)
+    setup_indexes()

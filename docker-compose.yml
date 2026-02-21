@@ -1,18 +1,22 @@
 version: '3.9'
 services:
   db:
-    image: postgres:16
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: eduvision_nexus
+    image: mongo:7
+    container_name: eduvision-mongo
     ports:
-      - '5432:5432'
+      - '27017:27017'
+    volumes:
+      - mongo_data:/data/db
   api:
     build: .
     env_file:
-      - backend/.env.example
+      - backend/.env
+    environment:
+      MONGODB_URI: mongodb://db:27017/eduvision_nexus
+      MONGODB_DB: eduvision_nexus
     ports:
       - '8000:8000'
     depends_on:
       - db
+volumes:
+  mongo_data:
