@@ -4,7 +4,7 @@ import { hashPassword } from './auth';
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017';
 const MONGODB_DB = process.env.MONGODB_DB || 'eduvision_nexus_v2';
-const APP_SETUP_VERSION = 2;
+const APP_SETUP_VERSION = 3;
 const APP_SETUP_DOC_ID = 'edumate-web-setup';
 
 const globalForMongo = globalThis as unknown as {
@@ -391,10 +391,7 @@ async function ensureDefaultUsersAndData() {
           { code },
           {
             $set: setPayload,
-            $setOnInsert: {
-              faculty_id: department.code === 'CSE' && assignedFaculty ? assignedFaculty : null,
-              created_at: now(),
-            },
+            $setOnInsert: { created_at: now() },
           },
           { upsert: true },
         );
@@ -602,6 +599,7 @@ export async function ensureDbSetup() {
       globalForMongo.mongoSetupDone = true;
     })().catch((error) => {
       globalForMongo.mongoSetupReady = undefined;
+      console.error('Database setup failed during ensureDbSetup', error);
       throw error;
     });
   }
