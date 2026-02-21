@@ -3,11 +3,12 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
+    "postinstall": "npm --prefix web install",
     "setup": "npm --prefix web install && python3 -m pip install -r services/attendance_service/requirements.txt",
     "dev": "concurrently -n web,face -c cyan,green \"cd web && npm run dev -- --hostname 0.0.0.0 --port 5173\" \"cd services/attendance_service && python3 -m uvicorn main:app --host 0.0.0.0 --port 8010 --reload\"",
     "dev:web": "cd web && npm run dev -- --hostname 0.0.0.0 --port 5173",
     "dev:face": "cd services/attendance_service && python3 -m uvicorn main:app --host 0.0.0.0 --port 8010 --reload",
-    "build": "cd web && npm run build"
+    "build": "npm --prefix web run build"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
