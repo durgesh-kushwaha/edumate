@@ -140,7 +140,7 @@ FACE_MATCH_THRESHOLD=0.58
 On first run, seed/setup creates required base data and users.
 
 Default accounts:
-- Superadmin: `durgeshcgc@gmail.com / Dk123456` (Durgesh Kushwaha)
+- Superadmin: `durgeshcgc@gmail.com / Pass@1234` (Durgesh Kushwaha)
 - Admin: `admin@eduvision.com / Pass@1234`
 - Faculty:
   - `teacher@eduvision.com / Pass@1234`

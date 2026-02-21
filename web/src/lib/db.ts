@@ -4,7 +4,7 @@ import { hashPassword } from './auth';
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017';
 const MONGODB_DB = process.env.MONGODB_DB || 'eduvision_nexus_v2';
-const APP_SETUP_VERSION = 3;
+const APP_SETUP_VERSION = 4;
 const APP_SETUP_DOC_ID = 'edumate-web-setup';
 
 const globalForMongo = globalThis as unknown as {

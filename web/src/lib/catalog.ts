@@ -159,6 +159,6 @@ export const PINCODE_FALLBACK: Record<string, { state: string; city: string }> =
 };
 
 export const SUPERADMIN_EMAIL = 'durgeshcgc@gmail.com';
-export const SUPERADMIN_PASSWORD = 'Dk123456';
+export const SUPERADMIN_PASSWORD = 'Pass@1234';
 export const SUPERADMIN_NAME = 'Durgesh Kushwaha';
 export const DEFAULT_PASSWORD = 'Pass@1234';
