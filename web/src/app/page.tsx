@@ -3921,15 +3921,6 @@ export default function HomePage() {
     return () => clearTimeout(timeout);
   }, [toast]);
 
-  async function loadDepartments() {
-    try {
-      const list = await apiJson<Department[]>('/api/catalog/departments');
-      setDepartments(list);
-    } catch {
-      setDepartments([]);
-    }
-  }
-
   async function loadAppState() {
     const payload = await apiJson<Dict>('/api/app/state');
     setState(payload);
@@ -3938,8 +3929,11 @@ export default function HomePage() {
   async function boot() {
     try {
       setLoading(true);
-      await loadDepartments();
-      const me = await apiJson<Dict>('/api/auth/me');
+      const [departmentList, me] = await Promise.all([
+        apiJson<Department[]>('/api/catalog/departments').catch(() => []),
+        apiJson<Dict>('/api/auth/me').catch(() => ({ user: null })),
+      ]);
+      setDepartments(Array.isArray(departmentList) ? departmentList : []);
       if (me.user) {
         await loadAppState();
       } else {

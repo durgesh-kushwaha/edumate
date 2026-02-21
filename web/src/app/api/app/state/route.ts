@@ -78,18 +78,39 @@ export async function GET() {
           db.collection('credential_vault').find().toArray(),
         ]);
 
-        const enrichedSalaryRecords: Record<string, unknown>[] = [];
-        for (const record of salaryRecords) {
-          const facultyId = asObjectId(record.faculty_id);
-          const facultyDoc = facultyId ? await db.collection('faculty').findOne({ _id: facultyId }) : null;
-          const facultyUserId = facultyDoc && asObjectId(facultyDoc.user_id);
-          const facultyUser = facultyUserId ? await db.collection('users').findOne({ _id: facultyUserId }) : null;
-          enrichedSalaryRecords.push({
+        const salaryFacultyIds = Array.from(
+          new Set(
+            salaryRecords
+              .map((record) => asObjectId(record.faculty_id))
+              .filter((value): value is ObjectId => value instanceof ObjectId)
+              .map((value) => value.toString()),
+          ),
+        ).map((value) => oid(value));
+        const salaryFacultyRows = salaryFacultyIds.length
+          ? await db.collection('faculty').find({ _id: { $in: salaryFacultyIds } }).toArray()
+          : [];
+        const salaryFacultyUserIds = Array.from(
+          new Set(
+            salaryFacultyRows
+              .map((row) => asObjectId(row.user_id))
+              .filter((value): value is ObjectId => value instanceof ObjectId)
+              .map((value) => value.toString()),
+          ),
+        ).map((value) => oid(value));
+        const salaryFacultyUserRows = salaryFacultyUserIds.length
+          ? await db.collection('users').find({ _id: { $in: salaryFacultyUserIds } }).toArray()
+          : [];
+        const salaryFacultyById = new Map(salaryFacultyRows.map((row) => [String(row._id), row]));
+        const salaryFacultyUserById = new Map(salaryFacultyUserRows.map((row) => [String(row._id), row]));
+        const enrichedSalaryRecords: Record<string, unknown>[] = salaryRecords.map((record) => {
+          const facultyDoc = salaryFacultyById.get(String(record.faculty_id || ''));
+          const facultyUser = facultyDoc ? salaryFacultyUserById.get(String(facultyDoc.user_id || '')) : null;
+          return {
             ...(toPublic(record) as Record<string, unknown>),
             faculty_name: facultyUser?.full_name || '',
             employee_code: facultyDoc?.employee_code || '',
-          });
-        }
+          };
+        });
 
         payload.superadmins = superadmins.map((item) => toPublic(item));
         payload.registration_requests = registrationRequests.map((item) => toPublic(item));
@@ -358,34 +379,82 @@ export async function GET() {
       ? (rawDepartmentDoc.classes as Array<Record<string, unknown>>)
       : [];
 
+    const facultyIds = Array.from(
+      new Set(
+        courses
+          .map((course) => asObjectId(course.faculty_id))
+          .filter((value): value is ObjectId => value instanceof ObjectId)
+          .map((value) => value.toString()),
+      ),
+    ).map((value) => oid(value));
+    const [facultyRows, assignmentRows] = await Promise.all([
+      facultyIds.length ? db.collection('faculty').find({ _id: { $in: facultyIds } }).toArray() : Promise.resolve([]),
+      courseIds.length ? db.collection('assignments').find({ course_id: { $in: courseIds } }).sort({ created_at: -1 }).toArray() : Promise.resolve([]),
+    ]);
+    const facultyUserIds = Array.from(
+      new Set(
+        facultyRows
+          .map((row) => asObjectId(row.user_id))
+          .filter((value): value is ObjectId => value instanceof ObjectId)
+          .map((value) => value.toString()),
+      ),
+    ).map((value) => oid(value));
+    const assignmentIds = assignmentRows.map((item) => item._id);
+    const [facultyUsers, submissionRows] = await Promise.all([
+      facultyUserIds.length ? db.collection('users').find({ _id: { $in: facultyUserIds } }).toArray() : Promise.resolve([]),
+      assignmentIds.length
+        ? db.collection('assignment_submissions').find({ assignment_id: { $in: assignmentIds }, student_id: student._id }).toArray()
+        : Promise.resolve([]),
+    ]);
+    const facultyById = new Map(facultyRows.map((row) => [String(row._id), row]));
+    const facultyUserById = new Map(facultyUsers.map((row) => [String(row._id), row]));
+    const submissionByAssignmentId = new Map(submissionRows.map((row) => [String(row.assignment_id), row]));
+    const assignmentsByCourse = new Map<string, Record<string, unknown>[]>();
+    for (const assignment of assignmentRows) {
+      const key = String(assignment.course_id || '');
+      const existing = assignmentsByCourse.get(key);
+      if (existing) {
+        existing.push(assignment as Record<string, unknown>);
+      } else {
+        assignmentsByCourse.set(key, [assignment as Record<string, unknown>]);
+      }
+    }
+    const econtentByCourse = new Map<string, Record<string, unknown>[]>();
+    for (const entry of econtentRows) {
+      const key = String(entry.course_id || '');
+      const existing = econtentByCourse.get(key);
+      if (existing) {
+        existing.push(entry as Record<string, unknown>);
+      } else {
+        econtentByCourse.set(key, [entry as Record<string, unknown>]);
+      }
+    }
+
     const academics: Record<string, unknown>[] = [];
     let assignmentTotal = 0;
     let assignmentSubmitted = 0;
     for (const course of courses) {
-      const faculty = await db.collection('faculty').findOne({ _id: course.faculty_id });
-      const facultyUser = faculty ? await db.collection('users').findOne({ _id: faculty.user_id }) : null;
-      const assignments = await db.collection('assignments').find({ course_id: course._id }).sort({ created_at: -1 }).toArray();
-      const econtentForCourse = econtentRows.filter((item) => String(item.course_id) === String(course._id));
-      const assignmentPayload = [];
-      for (const assignment of assignments) {
-        const submission = await db
-          .collection('assignment_submissions')
-          .findOne({ assignment_id: assignment._id, student_id: student._id });
+      const faculty = facultyById.get(String(course.faculty_id || ''));
+      const facultyUser = faculty ? facultyUserById.get(String(faculty.user_id || '')) : null;
+      const assignments = assignmentsByCourse.get(String(course._id)) || [];
+      const assignmentPayload = assignments.map((assignment) => {
+        const submission = submissionByAssignmentId.get(String(assignment._id)) || null;
         assignmentTotal += 1;
         if (submission) assignmentSubmitted += 1;
-        assignmentPayload.push({
+        return {
           ...(toPublic(assignment) as Record<string, unknown>),
           submitted: Boolean(submission),
           submission: toPublic(submission),
-        });
-      }
+        };
+      });
+
       academics.push({
         course_id: course._id.toString(),
         course_code: course.code,
         course_title: course.title,
         semester: course.semester,
         faculty_name: facultyUser?.full_name || 'Unassigned',
-        econtents: econtentForCourse.map((item) => toPublic(item)),
+        econtents: (econtentByCourse.get(String(course._id)) || []).map((item) => toPublic(item)),
         assignments: assignmentPayload,
       });
     }

@@ -1,14 +1,17 @@
 import { Binary, MongoClient, ObjectId } from 'mongodb';
-import { DEPARTMENTS, DEFAULT_PASSWORD, DESIGNATION_SALARY_DEFAULTS, SUPERADMIN_EMAIL } from './catalog';
+import { DEPARTMENTS, DEFAULT_PASSWORD, DESIGNATION_SALARY_DEFAULTS, SUPERADMIN_EMAIL, SUPERADMIN_PASSWORD } from './catalog';
 import { hashPassword } from './auth';
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017';
 const MONGODB_DB = process.env.MONGODB_DB || 'eduvision_nexus_v2';
+const APP_SETUP_VERSION = 1;
+const APP_SETUP_DOC_ID = 'edumate-web-setup';
 
 const globalForMongo = globalThis as unknown as {
   mongoClient?: MongoClient;
   mongoReady?: Promise<MongoClient>;
   mongoSetupDone?: boolean;
+  mongoSetupReady?: Promise<void>;
 };
 
 function now() {
@@ -156,7 +159,7 @@ async function ensureDefaultUsersAndData() {
   if (!superadmin) {
     const inserted = await db.collection('users').insertOne({
       email: SUPERADMIN_EMAIL,
-      hashed_password: hashPassword(DEFAULT_PASSWORD),
+      hashed_password: hashPassword(SUPERADMIN_PASSWORD),
       role: 'superadmin',
       full_name: 'Durgesh Superadmin',
       is_active: true,
@@ -166,7 +169,7 @@ async function ensureDefaultUsersAndData() {
     superadminId = inserted.insertedId;
   }
   if (superadminId) {
-    await seedCredentialVault(db, superadminId, DEFAULT_PASSWORD);
+    await seedCredentialVault(db, superadminId, SUPERADMIN_PASSWORD);
   }
 
   const admin = await db.collection('users').findOne({ email: 'admin@eduvision.com' });
@@ -555,7 +558,38 @@ export async function ensureDbSetup() {
   if (globalForMongo.mongoSetupDone) {
     return;
   }
-  await ensureIndexes();
-  await ensureDefaultUsersAndData();
-  globalForMongo.mongoSetupDone = true;
+  if (!globalForMongo.mongoSetupReady) {
+    globalForMongo.mongoSetupReady = (async () => {
+      const db = await getDb();
+      const setupCollection = db.collection<{
+        key: string;
+        version: number;
+        created_at: Date;
+        updated_at: Date;
+      }>('app_setup');
+      const state = (await setupCollection.findOne({ key: APP_SETUP_DOC_ID })) as
+        | { version?: number }
+        | null;
+      if (Number(state?.version || 0) >= APP_SETUP_VERSION) {
+        globalForMongo.mongoSetupDone = true;
+        return;
+      }
+
+      await ensureIndexes();
+      await ensureDefaultUsersAndData();
+      await setupCollection.updateOne(
+        { key: APP_SETUP_DOC_ID },
+        {
+          $set: { key: APP_SETUP_DOC_ID, version: APP_SETUP_VERSION, updated_at: now() },
+          $setOnInsert: { created_at: now() },
+        },
+        { upsert: true },
+      );
+      globalForMongo.mongoSetupDone = true;
+    })().catch((error) => {
+      globalForMongo.mongoSetupReady = undefined;
+      throw error;
+    });
+  }
+  await globalForMongo.mongoSetupReady;
 }

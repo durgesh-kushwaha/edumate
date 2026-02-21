@@ -158,5 +158,6 @@ export const PINCODE_FALLBACK: Record<string, { state: string; city: string }> =
   '500001': { state: 'Telangana', city: 'Hyderabad' },
 };
 
-export const SUPERADMIN_EMAIL = 'durgesh@zavraq.com';
+export const SUPERADMIN_EMAIL = 'durgeshcgc@gmail.com';
+export const SUPERADMIN_PASSWORD = 'Dk123456';
 export const DEFAULT_PASSWORD = 'Pass@1234';

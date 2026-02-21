@@ -13,11 +13,11 @@ export function jsonError(message: string, status = 400) {
 }
 
 export async function currentUser() {
-  await ensureDbSetup();
   const token = (await cookies()).get(AUTH_COOKIE)?.value;
   if (!token) {
     return null;
   }
+  await ensureDbSetup();
   const payload = verifyToken(token);
   if (!payload) {
     return null;
