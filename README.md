@@ -1,78 +1,257 @@
-# Smart Student Record Management System with AI-Based Face Recognition Attendance
+# EduVision Nexus
 
-## Tech Stack
-- Frontend: React + Vite + Tailwind + Axios + Recharts
-- Backend: FastAPI + SQLAlchemy + JWT + Pydantic
-- Database: PostgreSQL (3NF schema)
-- AI: OpenCV + face_recognition + NumPy
+EduVision Nexus is a multi-role ERP platform for campuses with role-specific portals for superadmin, admin, faculty, and students.
 
-## Folder Structure
-- `backend/`: API server, auth, RBAC, SRMS/attendance endpoints
-- `frontend/`: role-based dashboards and reports
-- `ai_engine/`: face dataset + attendance recognition engine
-- `database/`: schema and sample data
-- `docs/`: architecture, workflow, and project report structure
+The active production architecture in this repository is:
+- `web/` -> Next.js + TypeScript app (UI + API routes)
+- `services/attendance_service/` -> FastAPI + OpenCV attendance engine
+- MongoDB -> single database for platform data and face profiles
 
-## Quick Setup
-1. Copy environment file:
-   ```bash
-   cp backend/.env.example backend/.env
-   ```
-2. Start Postgres and API:
-   ```bash
-   docker compose up --build
-   ```
-3. Run backend locally (optional):
-   ```bash
-   cd backend && pip install -r requirements.txt && uvicorn app.main:app --reload
-   ```
-4. Seed base users:
-   ```bash
-   cd backend && python -m scripts.seed_data
-   ```
-5. Run frontend:
-   ```bash
-   cd frontend && npm install && npm run dev
-   ```
+## 1. Core Capabilities
 
-## Key API Endpoints
-- Auth: `/api/v1/auth/register`, `/api/v1/auth/login`
-- Admin: `/api/v1/admin/students`, `/faculty`, `/courses`, `/dashboard`
-- Teacher: `/api/v1/teacher/courses`, `/results`, `/attendance-report/{course_id}`
-- Student: `/api/v1/student/profile`, `/attendance`, `/results`
-- Attendance Engine: `/api/v1/attendance/face-encodings`, `/mark`
+- Role-based portals: superadmin, admin, faculty, student
+- Student self-registration with superadmin approval workflow
+- Admin/superadmin onboarding for students and faculty
+- Department-based academics with timetable and semester mapping
+- Face registration for students (duplicate face registration blocked)
+- Live face-based attendance workflows
+- Manual attendance by faculty with topic-covered field
+- Attendance CSV export for faculty
+- Assignments and e-content:
+  - faculty publishes
+  - students download and upload PDF submissions
+- Student exam and result workflows:
+  - hall ticket
+  - exam schedules
+  - semester-wise results
+  - exam-type views
+- Fees and payment declaration flow with Razorpay link
+- Profile update and password change for all roles
+- Faculty salary configuration and disbursement by superadmin
+- Campus notices with role/department/course targeting
 
-Swagger docs available at `/docs`.
+## 2. Current Tech Stack
 
-## Security Controls
-- Bcrypt password hashing
-- JWT token expiration
-- RBAC-enforced endpoints
-- Request validation with Pydantic
-- SQLAlchemy ORM (prevents SQL injection patterns)
-- CORS configured through environment variables
-- Global exception handling + logging
-- Soft-delete fields in all tables
+- Frontend + Backend API: Next.js 16 + React 19 + TypeScript
+- DB driver: MongoDB Node.js driver
+- Auth: JWT + HTTP-only cookie
+- Face service: FastAPI + OpenCV + NumPy + PyMongo
+- Data store: MongoDB (local or Atlas)
 
-## Deployment Guides
-### Render
-- Create PostgreSQL service and Web Service.
-- Set env vars from `.env.example`.
-- Start command: `uvicorn app.main:app --host 0.0.0.0 --port 10000`.
+## 3. Repository Structure
 
-### Railway
-- Provision PostgreSQL plugin.
-- Deploy backend folder as service.
-- Configure `DATABASE_URL` and JWT secrets.
+```text
+.
+├── web/                              # Main app (deploy on Vercel)
+│   ├── src/app/page.tsx              # Multi-role portal UI
+│   ├── src/app/api/...               # App API routes
+│   ├── src/lib/db.ts                 # DB setup + seed logic
+│   └── .env.example
+├── services/
+│   └── attendance_service/           # Python attendance service
+│       ├── main.py
+│       ├── requirements.txt
+│       └── .env.example
+└── package.json                      # Root scripts (dev/setup/build)
+```
 
-### AWS EC2 (basic)
-- Launch Ubuntu instance.
-- Install Docker + Docker Compose.
-- Clone repo and run `docker compose up --build -d`.
-- Expose ports 80/443 via Nginx reverse proxy.
+Notes:
+- `backend/` and `frontend/` directories are legacy and not used by the current runtime path.
+- Deploy only `web/` and `services/attendance_service/`.
 
-## Academic Documentation Checklist
-- Architecture: `docs/architecture.md`
-- Face workflow: `docs/face_workflow.md`
-- Report skeleton: `docs/project_report_template.md`
-- Database schema: `database/schema.sql`
+## 4. Local Development
+
+### Prerequisites
+
+- Node.js 20+
+- Python 3.10+
+- MongoDB local instance, or Atlas URI
+
+### Install dependencies
+
+```bash
+npm install
+npm run setup
+```
+
+### Environment files (local)
+
+```bash
+cp web/.env.example web/.env.local
+cp services/attendance_service/.env.example services/attendance_service/.env
+```
+
+### Run both services
+
+```bash
+npm run dev
+```
+
+Services:
+- Web app: `http://localhost:5173`
+- Attendance engine health: `http://localhost:8010/health`
+
+### Build
+
+```bash
+npm run build
+```
+
+## 5. Environment Variables
+
+### 5.1 Web app (`web/.env.local` for local, Vercel env for production)
+
+```env
+MONGODB_URI=mongodb://127.0.0.1:27017
+MONGODB_DB=eduvision_nexus_v2
+JWT_SECRET=replace_with_long_random_secret
+PY_ATTENDANCE_URL=http://127.0.0.1:8010
+```
+
+Production example:
+
+```env
+MONGODB_URI=mongodb+srv://<db_user>:<db_password>@<cluster>.mongodb.net/eduvision_nexus_v2?retryWrites=true&w=majority
+MONGODB_DB=eduvision_nexus_v2
+JWT_SECRET=<long_random_secret_64_plus_chars>
+PY_ATTENDANCE_URL=https://<your-attendance-service-domain>
+```
+
+### 5.2 Attendance service (`services/attendance_service/.env` for local, service env for production)
+
+```env
+MONGODB_URI=mongodb://127.0.0.1:27017
+MONGODB_DB=eduvision_nexus_v2
+FACE_MATCH_THRESHOLD=0.58
+```
+
+Production:
+
+```env
+MONGODB_URI=mongodb+srv://<db_user>:<db_password>@<cluster>.mongodb.net/eduvision_nexus_v2?retryWrites=true&w=majority
+MONGODB_DB=eduvision_nexus_v2
+FACE_MATCH_THRESHOLD=0.58
+```
+
+## 6. Seeded Data and Default Users
+
+On first run, seed/setup creates required base data and users.
+
+Default accounts:
+- Superadmin: `durgesh@zavraq.com / Pass@1234`
+- Admin: `admin@eduvision.com / Pass@1234`
+- Faculty:
+  - `teacher@eduvision.com / Pass@1234`
+  - `teacher2@eduvision.com / Pass@1234`
+  - `teacher3@eduvision.com / Pass@1234`
+  - `teacher4@eduvision.com / Pass@1234`
+- Student: `student@eduvision.com / Pass@1234`
+
+Seed behavior highlights:
+- Student sample data is constrained to semester 4 (year 2)
+- Student enrollments are capped by year-to-semester mapping
+- CSE subjects are distributed across multiple sample faculty
+
+## 7. Production Deployment (Recommended)
+
+### 7.1 MongoDB Atlas setup
+
+1. Create cluster.
+2. Create DB user with read/write access.
+3. Add Network Access:
+   - recommended: only deploy provider egress IPs
+   - temporary/testing: `0.0.0.0/0`
+4. Copy connection string and set `MONGODB_URI` in both services.
+
+### 7.2 Deploy attendance service first (Render/Railway/VPS)
+
+Service root:
+- `services/attendance_service`
+
+Build command:
+```bash
+pip install -r requirements.txt
+```
+
+Start command:
+```bash
+python3 -m uvicorn main:app --host 0.0.0.0 --port $PORT
+```
+
+Set env:
+- `MONGODB_URI`
+- `MONGODB_DB`
+- `FACE_MATCH_THRESHOLD`
+
+Verify:
+- Open `https://<attendance-domain>/health`
+- Should return `{"status":"ok"}`
+
+### 7.3 Deploy web app on Netlify
+
+Important:
+- Netlify hosts the Next.js app (`web/`) directly.
+- The Python attendance service is not deployed on Netlify in this setup.
+- Deploy `services/attendance_service` separately (Render/Railway/VPS), then set `PY_ATTENDANCE_URL` in Netlify.
+
+Netlify project setup:
+- Connect repository from Git provider
+- Framework preset: `Next.js` (recommended)
+- For monorepo selection, choose the `web` app directory when prompted
+
+If you configure manually, use:
+- Base directory: `web`
+- Build command: `npm run build`
+- Publish directory: `.next`
+
+Set env in Netlify:
+- `MONGODB_URI`
+- `MONGODB_DB`
+- `JWT_SECRET`
+- `PY_ATTENDANCE_URL` (attendance service URL from step 7.2)
+
+Deploy and verify:
+- Login works
+- Role dashboards load
+- Attendance scan endpoints can reach Python service
+
+## 8. Operational Notes
+
+- Razorpay payment link currently configured as:
+  - `https://razorpay.me/@zavraq`
+- Attendance and face profile data are stored in MongoDB.
+- Timetable-based "today classes" logic only shows mapped classes for current weekday.
+- If today is a non-scheduled day (for example Saturday in sample data), today class sections are intentionally empty.
+
+## 9. Security Checklist Before Going Live
+
+- Rotate all default passwords immediately
+- Rotate MongoDB password if it was shared in chat/logs
+- Use strong `JWT_SECRET`
+- Restrict Atlas network access
+- Use HTTPS-only domains for both services
+- Keep `PY_ATTENDANCE_URL` pointed to trusted endpoint only
+
+## 10. Useful Commands
+
+```bash
+# root
+npm run setup
+npm run dev
+npm run build
+
+# web only
+npm --prefix web run dev -- --hostname 0.0.0.0 --port 5173
+npm --prefix web run build
+
+# attendance service only
+cd services/attendance_service
+python3 -m uvicorn main:app --host 0.0.0.0 --port 8010 --reload
+```
+
+---
+
+If you are deploying for the first time, complete in this order:
+1. Atlas ready
+2. Attendance service live
+3. Web (Netlify) live with correct `PY_ATTENDANCE_URL`
