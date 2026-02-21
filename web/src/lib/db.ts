@@ -1,10 +1,10 @@
 import { Binary, MongoClient, ObjectId } from 'mongodb';
-import { DEPARTMENTS, DEFAULT_PASSWORD, DESIGNATION_SALARY_DEFAULTS, SUPERADMIN_EMAIL, SUPERADMIN_PASSWORD } from './catalog';
+import { DEPARTMENTS, DEFAULT_PASSWORD, DESIGNATION_SALARY_DEFAULTS, SUPERADMIN_EMAIL, SUPERADMIN_NAME, SUPERADMIN_PASSWORD } from './catalog';
 import { hashPassword } from './auth';
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017';
 const MONGODB_DB = process.env.MONGODB_DB || 'eduvision_nexus_v2';
-const APP_SETUP_VERSION = 1;
+const APP_SETUP_VERSION = 2;
 const APP_SETUP_DOC_ID = 'edumate-web-setup';
 
 const globalForMongo = globalThis as unknown as {
@@ -161,15 +161,29 @@ async function ensureDefaultUsersAndData() {
       email: SUPERADMIN_EMAIL,
       hashed_password: hashPassword(SUPERADMIN_PASSWORD),
       role: 'superadmin',
-      full_name: 'Durgesh Superadmin',
+      full_name: SUPERADMIN_NAME,
       is_active: true,
       created_at: now(),
       updated_at: now(),
     });
     superadminId = inserted.insertedId;
+  } else {
+    await db.collection('users').updateOne(
+      { _id: superadmin._id },
+      {
+        $set: {
+          role: 'superadmin',
+          full_name: SUPERADMIN_NAME,
+          hashed_password: hashPassword(SUPERADMIN_PASSWORD),
+          is_active: true,
+          updated_at: now(),
+        },
+      },
+    );
+    superadminId = superadmin._id;
   }
   if (superadminId) {
-    await seedCredentialVault(db, superadminId, SUPERADMIN_PASSWORD);
+    await upsertCredentialVault(db, superadminId, SUPERADMIN_PASSWORD);
   }
 
   const admin = await db.collection('users').findOne({ email: 'admin@eduvision.com' });

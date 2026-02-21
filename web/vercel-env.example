@@ -1,0 +1,9 @@
+# Vercel Environment Variables (Production)
+# Add these in Vercel -> Project Settings -> Environment Variables
+
+MONGODB_URI=mongodb+srv://<db_user>:<db_password>@<cluster>.mongodb.net/?retryWrites=true&w=majority&appName=EduMate
+MONGODB_DB=eduvision_nexus_v2
+JWT_SECRET=<put_a_long_random_secret_here_64plus_chars>
+PY_ATTENDANCE_URL=https://<your-render-attendance-service>.onrender.com
+PY_ATTENDANCE_TIMEOUT_MS=15000
+NEXT_TELEMETRY_DISABLED=1

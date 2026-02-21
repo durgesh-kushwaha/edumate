@@ -140,7 +140,7 @@ FACE_MATCH_THRESHOLD=0.58
 On first run, seed/setup creates required base data and users.
 
 Default accounts:
-- Superadmin: `durgeshcgc@gmail.com / Dk123456`
+- Superadmin: `durgeshcgc@gmail.com / Dk123456` (Durgesh Kushwaha)
 - Admin: `admin@eduvision.com / Pass@1234`
 - Faculty:
   - `teacher@eduvision.com / Pass@1234`
@@ -254,7 +254,11 @@ Deploy and verify:
    - `JWT_SECRET`
    - `PY_ATTENDANCE_URL`
    - `PY_ATTENDANCE_TIMEOUT_MS` (recommended `15000`)
+   - `NEXT_TELEMETRY_DISABLED=1`
 5. Deploy.
+
+Quick copy file:
+- Use `web/vercel-env.example` as reference while adding Vercel environment variables.
 
 ### 7.5 Render attendance warm-up on frontend open
 
