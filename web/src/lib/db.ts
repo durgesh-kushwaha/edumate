@@ -4,11 +4,12 @@ import { hashPassword } from './auth';
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017';
 const MONGODB_DB = process.env.MONGODB_DB || 'eduvision_nexus_v2';
-const APP_SETUP_VERSION = 5;
+const APP_SETUP_VERSION = 6;
 const APP_SETUP_DOC_ID = 'edumate-web-setup';
 const SUPERADMIN_SEED_EMAIL = (process.env.SEED_SUPERADMIN_EMAIL || 'superadmin@edumate.local').trim().toLowerCase();
 const SUPERADMIN_SEED_PASSWORD = process.env.SEED_SUPERADMIN_PASSWORD || DEFAULT_PASSWORD;
 const SUPERADMIN_SEED_NAME = (process.env.SEED_SUPERADMIN_NAME || 'Default Superadmin').trim();
+const MAX_SEMESTER_LIMIT = 20;
 
 const globalForMongo = globalThis as unknown as {
   mongoClient?: MongoClient;
@@ -68,12 +69,12 @@ function guessSemesterFromSubjectCode(code: string) {
     return 2;
   }
   const yearBucket = Number(match[1] || 1);
-  return Math.min(Math.max(yearBucket * 2, 1), 8);
+  return Math.min(Math.max(yearBucket * 2, 1), MAX_SEMESTER_LIMIT);
 }
 
 function maxSemesterFromYear(yearValue: unknown) {
   const year = Math.max(1, Number(yearValue || 1));
-  return Math.min(Math.floor(year) * 2, 8);
+  return Math.min(Math.floor(year) * 2, MAX_SEMESTER_LIMIT);
 }
 
 const SEMESTER_SUBJECT_TEMPLATES: Record<number, string[]> = {
@@ -151,6 +152,8 @@ async function ensureIndexes() {
     db.collection('notices').createIndex({ created_at: -1 }),
     db.collection('notices').createIndex({ target_roles: 1, created_at: -1 }),
     db.collection('econtents').createIndex({ course_id: 1, created_at: -1 }),
+    db.collection('extra_classes').createIndex({ class_date: 1, department: 1, semester: 1 }),
+    db.collection('extra_classes').createIndex({ created_by: 1, class_date: -1 }),
   ]);
 }
 

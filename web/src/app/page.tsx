@@ -334,6 +334,7 @@ function AdminSuperPortal({
   const salaryConfigs = Array.isArray(state.salary_configs) ? state.salary_configs : [];
   const salaryRecords = Array.isArray(state.salary_records) ? state.salary_records : [];
   const notices = Array.isArray(state.notices) ? state.notices : [];
+  const databaseRecords = (state.database_records || {}) as Record<string, Dict[]>;
   const userPasswords = (state.user_passwords || {}) as Record<string, string>;
 
   const [studentForm, setStudentForm] = useState(EMPTY_STUDENT_FORM);
@@ -354,11 +355,19 @@ function AdminSuperPortal({
   const [superadminForm, setSuperadminForm] = useState({ full_name: '', email: '', password: '' });
   const [salaryConfigForm, setSalaryConfigForm] = useState({ designation: '', monthly_salary: '' });
   const [salaryMonth, setSalaryMonth] = useState('');
+  const [semesterForm, setSemesterForm] = useState({
+    department: '',
+    year: '1',
+    semester: '',
+    section: 'A',
+    room_number: '',
+  });
   const [decisionRemarks, setDecisionRemarks] = useState<Record<string, string>>({});
   const [departmentPopupCode, setDepartmentPopupCode] = useState('');
   const [studentEditForm, setStudentEditForm] = useState<Dict | null>(null);
   const [facultyEditForm, setFacultyEditForm] = useState<Dict | null>(null);
   const [facultyCourseMap, setFacultyCourseMap] = useState<Record<string, string>>({});
+  const [databaseCollection, setDatabaseCollection] = useState('notices');
   const [noticeForm, setNoticeForm] = useState({
     title: '',
     body: '',
@@ -392,14 +401,18 @@ function AdminSuperPortal({
     { key: 'fees', label: 'Fees' },
     { key: 'attendance', label: 'Attendance' },
     { key: 'notices', label: 'Notices' },
-    ...(isSuperadmin ? [{ key: 'approvals', label: 'Approvals' }, { key: 'salary', label: 'Salary' }, { key: 'superadmins', label: 'Superadmins' }] : []),
+    ...(isSuperadmin
+      ? [{ key: 'approvals', label: 'Approvals' }, { key: 'salary', label: 'Salary' }, { key: 'superadmins', label: 'Superadmins' }, { key: 'database', label: 'Database' }]
+      : []),
     { key: 'account', label: 'Account' },
   ];
 
   const studentDepartmentOptions = departments.map((item) => item.name);
   const designationOptions = ['Lecturer', 'Assistant Professor', 'Associate Professor', 'Professor'];
+  const databaseCollectionOptions = ['notices', 'results', 'assignments', 'econtents', 'exam_schedules', 'extra_classes'];
   const selectedDepartment = departments.find((item) => item.code === departmentPopupCode) || null;
   const selectedFaceStudent = students.find((row: Dict) => String(row.student?.id || '') === faceStudentId);
+  const selectedDatabaseRecords = Array.isArray(databaseRecords[databaseCollection]) ? databaseRecords[databaseCollection] : [];
 
   async function autoFillStudentAddress(pincode: string) {
     if (!/^\d{6}$/.test(pincode)) return;
@@ -495,7 +508,7 @@ function AdminSuperPortal({
   }
 
   async function deleteStudent(studentId: string) {
-    if (!window.confirm('Delete this student account permanently?')) return;
+    if (!window.confirm('Delete this student account permanently? All linked student data will be deleted.')) return;
     await runAction('superadmin.delete_student', { student_id: studentId });
   }
 
@@ -521,7 +534,7 @@ function AdminSuperPortal({
   }
 
   async function deleteFaculty(facultyId: string) {
-    if (!window.confirm('Delete this faculty account? Courses will be unassigned.')) return;
+    if (!window.confirm('Delete this faculty account permanently? All linked faculty data will be deleted.')) return;
     await runAction('superadmin.delete_faculty', { faculty_id: facultyId });
   }
 
@@ -611,6 +624,46 @@ function AdminSuperPortal({
   async function disburseSalary(event: FormEvent) {
     event.preventDefault();
     await runAction('superadmin.salary_disburse', { month: salaryMonth });
+  }
+
+  async function addDepartmentSemester(event: FormEvent) {
+    event.preventDefault();
+    await runAction('superadmin.add_department_semester', {
+      department: semesterForm.department,
+      year: Number(semesterForm.year || 1),
+      semester: semesterForm.semester ? Number(semesterForm.semester) : undefined,
+      section: semesterForm.section || 'A',
+      room_number: semesterForm.room_number,
+    });
+    setSemesterForm({ department: semesterForm.department, year: semesterForm.year, semester: '', section: 'A', room_number: '' });
+  }
+
+  async function deleteDatabaseEntry(collection: string, recordId: string) {
+    if (!recordId) return;
+    if (!window.confirm(`Delete this ${collection} record directly from database?`)) return;
+    await runAction('superadmin.database_delete', { collection, record_id: recordId });
+  }
+
+  function databaseRecordLabel(collection: string, row: Dict) {
+    if (collection === 'notices') {
+      return `${row.title || 'Notice'} | ${formatDateTime(row.created_at)}`;
+    }
+    if (collection === 'results') {
+      return `${String(row.exam_type || 'exam').toUpperCase()} | Marks ${row.marks ?? '-'} / ${row.max_marks ?? '-'}`;
+    }
+    if (collection === 'assignments') {
+      return `${row.title || 'Assignment'} | Due ${row.due_date || '-'}`;
+    }
+    if (collection === 'econtents') {
+      return `${row.title || 'E-Content'} | ${String(row.content_type || '').toUpperCase()}`;
+    }
+    if (collection === 'exam_schedules') {
+      return `${row.subject_code || '-'} | ${row.exam_date || '-'} ${row.exam_time || ''}`;
+    }
+    if (collection === 'extra_classes') {
+      return `${row.course_code || '-'} | ${row.class_date || '-'} ${row.class_time || ''}`;
+    }
+    return `Record ${row.id || ''}`;
   }
 
   function toggleNoticeTarget(role: string) {
@@ -1077,6 +1130,30 @@ function AdminSuperPortal({
 
         {active === 'courses' && (
           <section className="stack">
+            {isSuperadmin && (
+              <article className="card">
+                <h2>Add Extra Semester (Department / Year)</h2>
+                <p className="muted">Create semester class mapping for any department and year. Semester courses and enrollments are synced automatically.</p>
+                <form className="form-grid three top-gap" onSubmit={addDepartmentSemester}>
+                  <select className="select" value={semesterForm.department} onChange={(event) => setSemesterForm((prev) => ({ ...prev, department: event.target.value }))} required>
+                    <option value="">Select Department</option>
+                    {studentDepartmentOptions.map((item) => (
+                      <option key={`semester-dept-${item}`} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+                  <input className="input" type="number" min={1} max={10} placeholder="Year" value={semesterForm.year} onChange={(event) => setSemesterForm((prev) => ({ ...prev, year: event.target.value }))} required />
+                  <input className="input" type="number" min={1} max={20} placeholder="Semester (Optional)" value={semesterForm.semester} onChange={(event) => setSemesterForm((prev) => ({ ...prev, semester: event.target.value }))} />
+                  <input className="input" placeholder="Section (A/B/C)" value={semesterForm.section} onChange={(event) => setSemesterForm((prev) => ({ ...prev, section: event.target.value.toUpperCase() }))} />
+                  <input className="input" placeholder="Room Number" value={semesterForm.room_number} onChange={(event) => setSemesterForm((prev) => ({ ...prev, room_number: event.target.value }))} />
+                  <button type="submit" className="btn btn-primary">
+                    Add Semester
+                  </button>
+                </form>
+              </article>
+            )}
+
             <article className="card">
               <h2>Create Course</h2>
               <form className="form-grid three" onSubmit={createCourse}>
@@ -1100,7 +1177,7 @@ function AdminSuperPortal({
                   ))}
                 </select>
 
-                <input className="input" type="number" min={1} max={8} placeholder="Semester" value={courseForm.semester} onChange={(event) => setCourseForm((prev) => ({ ...prev, semester: event.target.value }))} required />
+                <input className="input" type="number" min={1} max={20} placeholder="Semester" value={courseForm.semester} onChange={(event) => setCourseForm((prev) => ({ ...prev, semester: event.target.value }))} required />
                 <input className="input" type="number" min={1} max={8} placeholder="Credits" value={courseForm.credits} onChange={(event) => setCourseForm((prev) => ({ ...prev, credits: event.target.value }))} required />
                 <button type="submit" className="btn btn-primary full-row">
                   Create Course
@@ -1583,6 +1660,61 @@ function AdminSuperPortal({
           </section>
         )}
 
+        {isSuperadmin && active === 'database' && (
+          <section className="stack">
+            <article className="card">
+              <h2>Database Records</h2>
+              <p className="muted">Delete records directly from database (notices, results, assignments, and more).</p>
+              <div className="inline-actions top-gap">
+                <select className="select" value={databaseCollection} onChange={(event) => setDatabaseCollection(event.target.value)}>
+                  {databaseCollectionOptions.map((item) => (
+                    <option key={`db-collection-${item}`} value={item}>
+                      {item.replace(/_/g, ' ').toUpperCase()}
+                    </option>
+                  ))}
+                </select>
+                <button type="button" className="btn btn-secondary" onClick={refresh}>
+                  Refresh
+                </button>
+              </div>
+            </article>
+
+            <article className="card">
+              <h2>{databaseCollection.replace(/_/g, ' ').toUpperCase()} Records</h2>
+              {selectedDatabaseRecords.length === 0 ? (
+                <p className="muted top-gap">No records found in this collection.</p>
+              ) : (
+                <div className="table-wrap top-gap">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Record</th>
+                        <th>Created / Updated</th>
+                        <th>ID</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedDatabaseRecords.map((row: Dict) => (
+                        <tr key={`${databaseCollection}-${row.id}`}>
+                          <td>{databaseRecordLabel(databaseCollection, row)}</td>
+                          <td>{formatDateTime(String(row.updated_at || row.created_at || ''))}</td>
+                          <td>{row.id}</td>
+                          <td>
+                            <button type="button" className="btn btn-danger mini" onClick={() => deleteDatabaseEntry(databaseCollection, String(row.id || ''))}>
+                              Delete From DB
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </article>
+          </section>
+        )}
+
         {active === 'account' && (
           <section className="stack">
             <article className="card">
@@ -1639,6 +1771,7 @@ function TeacherPortal({
   const econtents = Array.isArray(state.econtents) ? state.econtents : [];
   const notices = Array.isArray(state.notices) ? state.notices : [];
   const todayClasses = Array.isArray(state.today_classes) ? state.today_classes : [];
+  const extraClasses = Array.isArray(state.extra_classes) ? state.extra_classes : [];
   const todayDayName = String(state.today_day || new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date()));
 
   const [active, setActive] = useState('dashboard');
@@ -1687,6 +1820,18 @@ function TeacherPortal({
     topic_covered: '',
   });
   const [manualSelected, setManualSelected] = useState<Record<string, boolean>>({});
+  const [extraClassForm, setExtraClassForm] = useState({
+    course_id: '',
+    course_code: '',
+    course_title: '',
+    department: String(state.faculty?.department || ''),
+    semester: '',
+    class_date: new Date().toISOString().slice(0, 10),
+    class_time: '',
+    section: 'A',
+    room_number: '',
+    note: '',
+  });
 
   const {
     videoRef: teacherVideoRef,
@@ -1714,6 +1859,7 @@ function TeacherPortal({
   );
 
   const allManualSelected = manualStudents.length > 0 && manualStudents.every((entry: Dict) => manualSelected[String(entry.student_id)]);
+  const departmentNames = departments.map((entry: Dict) => String(entry.name || '')).filter((entry) => entry);
 
   useEffect(() => {
     if ((!selectedCourseId || !attendanceCourseIdSet.has(String(selectedCourseId))) && attendanceCourses[0]?.id) {
@@ -1732,6 +1878,19 @@ function TeacherPortal({
       setResultForm((prev) => ({ ...prev, course_id: String(courses[0].id) }));
     }
   }, [courses, attendanceCourses, attendanceCourseIdSet, selectedCourseId, assignmentForm.course_id, econtentForm.course_id, resultForm.course_id]);
+
+  useEffect(() => {
+    if (!extraClassForm.course_id && courses[0]?.id) {
+      setExtraClassForm((prev) => ({
+        ...prev,
+        course_id: String(courses[0].id),
+        course_code: String(courses[0].code || ''),
+        course_title: String(courses[0].title || ''),
+        department: String(courses[0].department || prev.department || ''),
+        semester: String(courses[0].semester || prev.semester || '1'),
+      }));
+    }
+  }, [courses, extraClassForm.course_id]);
 
   useEffect(() => {
     const studentForCourse = courseStudents.find((item: Dict) => String(item.course_id) === String(resultForm.course_id));
@@ -1964,6 +2123,55 @@ function TeacherPortal({
     setNoticeForm((prev) => ({ ...prev, title: '', body: '' }));
   }
 
+  function handleExtraClassCourse(courseId: string) {
+    const mappedCourse = courses.find((item: Dict) => String(item.id) === String(courseId));
+    setExtraClassForm((prev) => ({
+      ...prev,
+      course_id: courseId,
+      course_code: String(mappedCourse?.code || prev.course_code || ''),
+      course_title: String(mappedCourse?.title || prev.course_title || ''),
+      department: String(mappedCourse?.department || prev.department || ''),
+      semester: String(mappedCourse?.semester || prev.semester || '1'),
+    }));
+  }
+
+  async function createExtraClass(event: FormEvent) {
+    event.preventDefault();
+    if (!extraClassForm.department) {
+      notify('Select target department for extra class.', 'error');
+      return;
+    }
+    if (!extraClassForm.semester) {
+      notify('Enter target semester for extra class.', 'error');
+      return;
+    }
+    if (!extraClassForm.class_time.trim()) {
+      notify('Enter class time for extra class.', 'error');
+      return;
+    }
+
+    await runAction('teacher.create_extra_class', {
+      course_id: extraClassForm.course_id,
+      course_code: extraClassForm.course_code,
+      course_title: extraClassForm.course_title,
+      department: extraClassForm.department,
+      semester: Number(extraClassForm.semester),
+      class_date: extraClassForm.class_date,
+      class_time: extraClassForm.class_time,
+      section: extraClassForm.section || 'A',
+      room_number: extraClassForm.room_number,
+      note: extraClassForm.note,
+    });
+
+    setExtraClassForm((prev) => ({
+      ...prev,
+      class_time: '',
+      room_number: '',
+      note: '',
+      class_date: new Date().toISOString().slice(0, 10),
+    }));
+  }
+
   async function gradeSubmission(submissionId: string) {
     const data = gradingForm[submissionId];
     if (!data) {
@@ -2042,10 +2250,12 @@ function TeacherPortal({
                     <thead>
                       <tr>
                         <th>Time</th>
+                        <th>Type</th>
                         <th>Subject</th>
                         <th>Semester</th>
                         <th>Section</th>
                         <th>Room</th>
+                        <th>Note</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2053,9 +2263,85 @@ function TeacherPortal({
                         <tr key={`teacher-today-${entry.course_id || index}`}>
                           <td>{entry.class_time || '-'}</td>
                           <td>
+                            <span className={String(entry.class_type || '') === 'extra' ? 'badge badge-blue' : 'badge badge-green'}>
+                              {String(entry.class_type || 'regular').toUpperCase()}
+                            </span>
+                          </td>
+                          <td>
                             {entry.course_code} - {entry.course_title}
                           </td>
                           <td>{entry.semester || '-'}</td>
+                          <td>{entry.section || '-'}</td>
+                          <td>{entry.room_number || '-'}</td>
+                          <td>{entry.note || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </article>
+            <article className="card">
+              <h2>Create Extra Class</h2>
+              <p className="muted">Generate extra class for any department and semester. It will appear in students&apos; daily schedule.</p>
+              <form className="form-grid three top-gap" onSubmit={createExtraClass}>
+                <select className="select" value={extraClassForm.course_id} onChange={(event) => handleExtraClassCourse(event.target.value)}>
+                  <option value="">Manual Subject Entry</option>
+                  {courses.map((course: Dict) => (
+                    <option key={`extra-course-${course.id}`} value={course.id}>
+                      {course.code} - {course.title}
+                    </option>
+                  ))}
+                </select>
+                <input className="input" placeholder="Subject Code" value={extraClassForm.course_code} onChange={(event) => setExtraClassForm((prev) => ({ ...prev, course_code: event.target.value.toUpperCase() }))} required />
+                <input className="input" placeholder="Subject Title" value={extraClassForm.course_title} onChange={(event) => setExtraClassForm((prev) => ({ ...prev, course_title: event.target.value }))} required />
+                <select className="select" value={extraClassForm.department} onChange={(event) => setExtraClassForm((prev) => ({ ...prev, department: event.target.value }))} required>
+                  <option value="">Select Department</option>
+                  {departmentNames.map((dept) => (
+                    <option key={`extra-dept-${dept}`} value={dept}>
+                      {dept}
+                    </option>
+                  ))}
+                </select>
+                <input className="input" type="number" min={1} max={20} placeholder="Semester" value={extraClassForm.semester} onChange={(event) => setExtraClassForm((prev) => ({ ...prev, semester: event.target.value }))} required />
+                <input className="input" type="date" value={extraClassForm.class_date} onChange={(event) => setExtraClassForm((prev) => ({ ...prev, class_date: event.target.value }))} required />
+                <input className="input" placeholder="Class Time (e.g. 17:00)" value={extraClassForm.class_time} onChange={(event) => setExtraClassForm((prev) => ({ ...prev, class_time: event.target.value }))} required />
+                <input className="input" placeholder="Section" value={extraClassForm.section} onChange={(event) => setExtraClassForm((prev) => ({ ...prev, section: event.target.value.toUpperCase() }))} />
+                <input className="input" placeholder="Room Number" value={extraClassForm.room_number} onChange={(event) => setExtraClassForm((prev) => ({ ...prev, room_number: event.target.value }))} />
+                <input className="input" placeholder="Note (optional)" value={extraClassForm.note} onChange={(event) => setExtraClassForm((prev) => ({ ...prev, note: event.target.value }))} />
+                <button type="submit" className="btn btn-primary full-row">
+                  Add Extra Class
+                </button>
+              </form>
+            </article>
+            <article className="card">
+              <h2>Extra Classes (Created By You)</h2>
+              {extraClasses.length === 0 ? (
+                <p className="muted">No extra classes created yet.</p>
+              ) : (
+                <div className="table-wrap">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Time</th>
+                        <th>Department</th>
+                        <th>Semester</th>
+                        <th>Subject</th>
+                        <th>Section</th>
+                        <th>Room</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {extraClasses.map((entry: Dict) => (
+                        <tr key={`extra-created-${entry.id}`}>
+                          <td>{entry.class_date || '-'}</td>
+                          <td>{entry.class_time || '-'}</td>
+                          <td>{entry.department || '-'}</td>
+                          <td>{entry.semester || '-'}</td>
+                          <td>
+                            {entry.course_code} - {entry.course_title}
+                          </td>
                           <td>{entry.section || '-'}</td>
                           <td>{entry.room_number || '-'}</td>
                         </tr>
@@ -2097,7 +2383,7 @@ function TeacherPortal({
           <section className="stack">
             <article className="card">
               <h2>Manual Attendance Sessions (Today)</h2>
-              <p className="muted">Only today&apos;s scheduled classes are available for attendance.</p>
+              <p className="muted">Only course-linked classes from today schedule are available for attendance.</p>
               {todayClasses.length === 0 ? (
                 <p className="muted top-gap">No classes scheduled for today.</p>
               ) : (
@@ -2106,6 +2392,7 @@ function TeacherPortal({
                     <thead>
                       <tr>
                         <th>Time</th>
+                        <th>Type</th>
                         <th>Subject</th>
                         <th>Semester</th>
                         <th>Section</th>
@@ -2118,6 +2405,7 @@ function TeacherPortal({
                       {todayClasses.map((entry: Dict, index: number) => (
                         <tr key={`manual-${entry.course_id || index}`}>
                           <td>{entry.class_time || '-'}</td>
+                          <td>{String(entry.class_type || 'regular').toUpperCase()}</td>
                           <td>
                             {entry.course_code} - {entry.course_title}
                           </td>
@@ -2126,9 +2414,13 @@ function TeacherPortal({
                           <td>{entry.room_number || '-'}</td>
                           <td>{courseStudents.filter((row: Dict) => String(row.course_id) === String(entry.course_id)).length}</td>
                           <td>
-                            <button type="button" className="btn btn-primary mini" onClick={() => openManualAttendance(String(entry.course_id || ''))}>
-                              Take Attendance
-                            </button>
+                            {entry.course_id ? (
+                              <button type="button" className="btn btn-primary mini" onClick={() => openManualAttendance(String(entry.course_id || ''))}>
+                                Take Attendance
+                              </button>
+                            ) : (
+                              <span className="muted small">No linked subject</span>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -3094,11 +3386,13 @@ function StudentPortal({
                     <thead>
                       <tr>
                         <th>Time</th>
+                        <th>Type</th>
                         <th>Subject</th>
                         <th>Faculty</th>
                         <th>Semester</th>
                         <th>Section</th>
                         <th>Room</th>
+                        <th>Note</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -3106,12 +3400,18 @@ function StudentPortal({
                         <tr key={`today-class-${entry.course_id || index}`}>
                           <td>{entry.class_time || '-'}</td>
                           <td>
+                            <span className={String(entry.class_type || '') === 'extra' ? 'badge badge-blue' : 'badge badge-green'}>
+                              {String(entry.class_type || 'regular').toUpperCase()}
+                            </span>
+                          </td>
+                          <td>
                             {entry.course_code} - {entry.course_title}
                           </td>
                           <td>{entry.faculty_name || '-'}</td>
                           <td>{entry.semester || '-'}</td>
                           <td>{entry.section || '-'}</td>
                           <td>{entry.room_number || '-'}</td>
+                          <td>{entry.note || '-'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -3926,14 +4226,20 @@ export default function HomePage() {
     setState(payload);
   }
 
+  async function loadDepartments() {
+    const payload = await apiJson<Department[]>('/api/catalog/departments').catch(() => []);
+    setDepartments(Array.isArray(payload) ? payload : []);
+  }
+
+  async function refreshPortal() {
+    await Promise.all([loadAppState(), loadDepartments()]);
+  }
+
   async function boot() {
     try {
       setLoading(true);
-      const [departmentList, me] = await Promise.all([
-        apiJson<Department[]>('/api/catalog/departments').catch(() => []),
-        apiJson<Dict>('/api/auth/me').catch(() => ({ user: null })),
-      ]);
-      setDepartments(Array.isArray(departmentList) ? departmentList : []);
+      const me = await apiJson<Dict>('/api/auth/me').catch(() => ({ user: null }));
+      await loadDepartments();
       if (me.user) {
         await loadAppState();
       } else {
@@ -3959,7 +4265,7 @@ export default function HomePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
-      await loadAppState();
+      await refreshPortal();
       notify('Login successful.', 'success');
     } catch (error) {
       notify((error as Error).message, 'error');
@@ -4001,7 +4307,7 @@ export default function HomePage() {
         notify(String(response.message), 'success');
       }
       if (refreshAfter) {
-        await loadAppState();
+        await Promise.all([loadAppState(), loadDepartments()]);
       }
       return response;
     } catch (error) {
@@ -4026,7 +4332,7 @@ export default function HomePage() {
       {state && role && (
         <>
           {(role === 'admin' || role === 'superadmin') && (
-            <AdminSuperPortal state={state} departments={departments} runAction={runAction} refresh={loadAppState} notify={notify} onLogout={logout} />
+            <AdminSuperPortal state={state} departments={departments} runAction={runAction} refresh={refreshPortal} notify={notify} onLogout={logout} />
           )}
           {role === 'teacher' && <TeacherPortal state={state} runAction={runAction} notify={notify} onLogout={logout} />}
           {role === 'student' && <StudentPortal state={state} runAction={runAction} refresh={loadAppState} notify={notify} onLogout={logout} />}

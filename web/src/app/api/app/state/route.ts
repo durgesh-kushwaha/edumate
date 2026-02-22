@@ -3,12 +3,30 @@ import { adminStats, listCourses, listFaculty, listFees, listStudents } from '@/
 import { ensureDbSetup, getDb, oid, toPublic } from '@/lib/db';
 import { jsonError, jsonOk, requireUser, safeUser } from '@/lib/http';
 
+const MAX_SEMESTER_LIMIT = 20;
+
 function asObjectId(value: unknown): ObjectId | null {
   return value instanceof ObjectId ? value : null;
 }
 
 function todayDayName() {
   return new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date());
+}
+
+function todayDateKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function classTimeSortKey(raw: unknown) {
+  const input = String(raw || '').trim();
+  const match = input.match(/(\d{1,2}):(\d{2})(?:\s*(AM|PM))?/i);
+  if (!match) return Number.MAX_SAFE_INTEGER;
+  let hour = Number(match[1] || 0);
+  const minute = Number(match[2] || 0);
+  const meridian = String(match[3] || '').toUpperCase();
+  if (meridian === 'PM' && hour < 12) hour += 12;
+  if (meridian === 'AM' && hour === 12) hour = 0;
+  return hour * 60 + minute;
 }
 
 function parseTimetableSlot(raw: unknown) {
@@ -70,12 +88,30 @@ export async function GET() {
       };
 
       if (user.role === 'superadmin') {
-        const [superadmins, registrationRequests, salaryConfigs, salaryRecords, credentialRows] = await Promise.all([
+        const [
+          superadmins,
+          registrationRequests,
+          salaryConfigs,
+          salaryRecords,
+          credentialRows,
+          dbNotices,
+          dbResults,
+          dbAssignments,
+          dbEcontents,
+          dbExamSchedules,
+          dbExtraClasses,
+        ] = await Promise.all([
           db.collection('users').find({ role: 'superadmin', is_active: true }).sort({ created_at: -1 }).toArray(),
           db.collection('registration_requests').find({ status: 'pending' }).sort({ submitted_at: -1 }).toArray(),
           db.collection('salary_configs').find().sort({ designation: 1 }).toArray(),
           db.collection('salary_records').find().sort({ created_at: -1 }).limit(30).toArray(),
           db.collection('credential_vault').find().toArray(),
+          db.collection('notices').find().sort({ created_at: -1 }).limit(120).toArray(),
+          db.collection('results').find().sort({ updated_at: -1 }).limit(120).toArray(),
+          db.collection('assignments').find().sort({ created_at: -1 }).limit(120).toArray(),
+          db.collection('econtents').find().sort({ created_at: -1 }).limit(120).toArray(),
+          db.collection('exam_schedules').find().sort({ exam_date: -1 }).limit(120).toArray(),
+          db.collection('extra_classes').find().sort({ class_date: -1, class_time: -1 }).limit(120).toArray(),
         ]);
 
         const salaryFacultyIds = Array.from(
@@ -125,6 +161,14 @@ export async function GET() {
           },
           {} as Record<string, string>,
         );
+        payload.database_records = {
+          notices: dbNotices.map((item) => toPublic(item)),
+          results: dbResults.map((item) => toPublic(item)),
+          assignments: dbAssignments.map((item) => toPublic(item)),
+          econtents: dbEcontents.map((item) => toPublic(item)),
+          exam_schedules: dbExamSchedules.map((item) => toPublic(item)),
+          extra_classes: dbExtraClasses.map((item) => toPublic(item)),
+        };
       }
 
       return jsonOk(payload);
@@ -164,11 +208,12 @@ export async function GET() {
         ? (facultyDepartmentDoc.classes as Array<Record<string, unknown>>)
         : [];
       const teacherTodayName = todayDayName();
+      const teacherTodayDate = todayDateKey();
       const teacherTodaySchedule = facultyDepartmentTimetable.find(
         (entry) => String(entry?.day || '').trim().toLowerCase() === teacherTodayName.toLowerCase(),
       );
       const teacherTodaySlots = Array.isArray(teacherTodaySchedule?.slots) ? (teacherTodaySchedule.slots as unknown[]) : [];
-      const teacherTodayClasses = teacherTodaySlots
+      const teacherRegularClasses = teacherTodaySlots
         .map((slotValue) => {
           const parsedSlot = parseTimetableSlot(slotValue);
           if (!parsedSlot.course_code) return null;
@@ -187,9 +232,37 @@ export async function GET() {
             semester: Number(mappedCourse.semester || 0),
             section: String(classInfo?.section || 'A'),
             room_number: String(classInfo?.room || '-'),
+            class_type: 'regular',
           };
         })
         .filter((entry) => entry !== null) as Array<Record<string, unknown>>;
+      const teacherExtraClassRows = await db
+        .collection('extra_classes')
+        .find({ created_by: user._id })
+        .sort({ class_date: 1, class_time: 1 })
+        .limit(120)
+        .toArray();
+      const teacherTodayExtraClasses = teacherExtraClassRows
+        .filter((entry) => String(entry.class_date || '') === teacherTodayDate)
+        .map((entry) => ({
+          id: String(entry._id),
+          day: teacherTodayName,
+          slot: `${String(entry.class_time || '')} ${String(entry.course_code || '').trim()}`.trim(),
+          class_time: String(entry.class_time || '-'),
+          course_id: entry.course_id instanceof ObjectId ? entry.course_id.toString() : '',
+          course_code: String(entry.course_code || ''),
+          course_title: String(entry.course_title || ''),
+          semester: Number(entry.semester || 0),
+          section: String(entry.section || 'A'),
+          room_number: String(entry.room_number || '-'),
+          class_type: 'extra',
+          note: String(entry.note || ''),
+          department: String(entry.department || ''),
+          class_date: String(entry.class_date || ''),
+        }));
+      const teacherTodayClasses = [...teacherRegularClasses, ...teacherTodayExtraClasses].sort(
+        (a, b) => classTimeSortKey(a.class_time) - classTimeSortKey(b.class_time),
+      );
 
       const activeSessions = await db.collection('attendance_sessions').find({ is_active: true }).sort({ started_at: -1 }).toArray();
       const enrollmentRows = await db.collection('enrollments').find({ course_id: { $in: courseIds } }).toArray();
@@ -289,6 +362,7 @@ export async function GET() {
         faculty: toPublic(faculty),
         today_day: teacherTodayName,
         today_classes: teacherTodayClasses,
+        extra_classes: teacherExtraClassRows.map((entry) => toPublic(entry)),
         courses: courses.map((item) => toPublic(item)),
         assignments: assignmentsWithCourse,
         econtents: econtentWithCourse,
@@ -460,11 +534,13 @@ export async function GET() {
     }
 
     const studentTodayName = todayDayName();
+    const studentTodayDate = todayDateKey();
+    const currentSemester = Math.min(Math.max(Number(student.year || 1) * 2, 1), MAX_SEMESTER_LIMIT);
     const studentTodaySchedule = studentTimetable.find(
       (entry) => String(entry?.day || '').trim().toLowerCase() === studentTodayName.toLowerCase(),
     );
     const studentTodaySlots = Array.isArray(studentTodaySchedule?.slots) ? (studentTodaySchedule.slots as unknown[]) : [];
-    const studentTodayClasses = studentTodaySlots
+    const studentRegularClasses = studentTodaySlots
       .map((slotValue) => {
         const parsedSlot = parseTimetableSlot(slotValue);
         if (!parsedSlot.course_code) return null;
@@ -485,11 +561,51 @@ export async function GET() {
           semester: Number(mappedCourse.semester || 0),
           section: String(classInfo?.section || 'A'),
           room_number: String(classInfo?.room || '-'),
+          class_type: 'regular',
         };
       })
       .filter((entry) => entry !== null) as Array<Record<string, unknown>>;
+    const extraClassRows = await db
+      .collection('extra_classes')
+      .find({
+        class_date: studentTodayDate,
+        department: String(student.department || ''),
+        semester: currentSemester,
+      })
+      .sort({ class_time: 1 })
+      .toArray();
+    const extraClassCreatorIds = Array.from(
+      new Set(
+        extraClassRows
+          .map((entry) => asObjectId(entry.created_by))
+          .filter((value): value is ObjectId => value instanceof ObjectId)
+          .map((value) => value.toString()),
+      ),
+    ).map((value) => oid(value));
+    const extraClassCreators = extraClassCreatorIds.length
+      ? await db.collection('users').find({ _id: { $in: extraClassCreatorIds } }).toArray()
+      : [];
+    const extraClassCreatorMap = new Map(extraClassCreators.map((row) => [String(row._id), row]));
+    const studentExtraClasses = extraClassRows.map((entry) => ({
+      id: String(entry._id),
+      day: studentTodayName,
+      slot: `${String(entry.class_time || '')} ${String(entry.course_code || '').trim()}`.trim(),
+      class_time: String(entry.class_time || '-'),
+      course_id: entry.course_id instanceof ObjectId ? entry.course_id.toString() : '',
+      course_code: String(entry.course_code || ''),
+      course_title: String(entry.course_title || ''),
+      faculty_name: String(extraClassCreatorMap.get(String(entry.created_by || ''))?.full_name || 'Faculty'),
+      semester: Number(entry.semester || 0),
+      section: String(entry.section || 'A'),
+      room_number: String(entry.room_number || '-'),
+      class_type: 'extra',
+      note: String(entry.note || ''),
+    }));
+    const studentTodayClasses = [...studentRegularClasses, ...studentExtraClasses].sort(
+      (a, b) => classTimeSortKey(a.class_time) - classTimeSortKey(b.class_time),
+    );
 
-    const semester = Math.min(Number(student.year || 1) * 2, 8);
+    const semester = currentSemester;
     const exams = await db.collection('exam_schedules').find({ department: student.department, semester }).sort({ exam_date: 1 }).toArray();
 
     let hallTicket = await db.collection('hall_tickets').findOne({ student_id: student._id, semester });

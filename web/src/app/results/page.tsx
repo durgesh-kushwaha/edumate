@@ -30,6 +30,10 @@ export default function ResultsPage() {
   const [state, setState] = useState<Dict | null>(null);
   const [selectedSemester, setSelectedSemester] = useState<string>('all');
 
+  function printResult() {
+    window.print();
+  }
+
   useEffect(() => {
     (async () => {
       try {
@@ -100,6 +104,9 @@ export default function ResultsPage() {
           <Link href="/" className="tab-pill active">
             Back to Student Portal
           </Link>
+          <button type="button" className="tab-pill no-print" onClick={printResult}>
+            Print Result
+          </button>
         </nav>
       </header>
 

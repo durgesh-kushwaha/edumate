@@ -11,6 +11,26 @@ type ActionBody = {
 
 const RAZORPAY_PAYMENT_LINK = 'https://razorpay.me/@zavraq';
 const NOTICE_ROLE_TARGETS = ['student', 'teacher', 'admin', 'superadmin'] as const;
+const MAX_SEMESTER_LIMIT = 20;
+const EXTRA_SEMESTER_TEMPLATE_TITLES = ['Core Subject I', 'Core Subject II', 'Lab / Practical'];
+const DATABASE_DELETABLE_COLLECTIONS = [
+  'notices',
+  'results',
+  'assignments',
+  'econtents',
+  'fee_ledgers',
+  'attendance',
+  'attendance_sessions',
+  'exam_schedules',
+  'hall_tickets',
+  'salary_records',
+  'salary_configs',
+  'registration_requests',
+  'extra_classes',
+  'courses',
+] as const;
+
+type DatabaseDeletableCollection = (typeof DATABASE_DELETABLE_COLLECTIONS)[number];
 
 function isDepartmentAllowed(value: string) {
   return DEPARTMENTS.some((item) => item.name === value);
@@ -39,12 +59,279 @@ function normalizeNoticeTargets(raw: unknown) {
 function guessSemesterFromSubjectCode(code: string) {
   const match = code.toUpperCase().match(/[A-Z]+(\d)\d{2}/);
   const yearBucket = Number(match?.[1] || 1);
-  return Math.min(Math.max(yearBucket * 2, 1), 8);
+  return Math.min(Math.max(yearBucket * 2, 1), MAX_SEMESTER_LIMIT);
 }
 
 function maxSemesterFromYear(yearValue: unknown) {
   const year = Math.max(1, Number(yearValue || 1));
-  return Math.min(Math.floor(year) * 2, 8);
+  return Math.min(Math.floor(year) * 2, MAX_SEMESTER_LIMIT);
+}
+
+function normalizeYear(value: unknown, fallback = 1) {
+  const year = Number(value || fallback);
+  if (!Number.isFinite(year)) return fallback;
+  return Math.max(1, Math.floor(year));
+}
+
+function normalizeSemester(value: unknown, fallback = 1) {
+  const semester = Number(value || fallback);
+  if (!Number.isFinite(semester)) return fallback;
+  return Math.min(Math.max(Math.floor(semester), 1), MAX_SEMESTER_LIMIT);
+}
+
+function generatedSemesterCourseCode(departmentCode: string, semester: number, index: number) {
+  return `${departmentCode}S${semester}${String(index + 1).padStart(2, '0')}`;
+}
+
+function asObjectId(value: unknown): ObjectId | null {
+  return value instanceof ObjectId ? value : null;
+}
+
+function uniqueObjectIds(values: unknown[]) {
+  const map = new Map<string, ObjectId>();
+  for (const value of values) {
+    if (value instanceof ObjectId) {
+      map.set(value.toString(), value);
+    }
+  }
+  return [...map.values()];
+}
+
+function semesterTemplateTitles(semester: number, departmentCode: string) {
+  return EXTRA_SEMESTER_TEMPLATE_TITLES.map((title, index) => {
+    const suffix = semester > 8 ? `(${departmentCode} Sem ${semester} - ${index + 1})` : `(${departmentCode})`;
+    return `${title} ${suffix}`;
+  });
+}
+
+async function deleteFileBlobsByIds(
+  db: Awaited<ReturnType<typeof getDb>>,
+  fileIds: ObjectId[],
+) {
+  if (!fileIds.length) return;
+  await db.collection('file_blobs').deleteMany({ _id: { $in: fileIds } });
+}
+
+async function seedDepartmentSemesterCourses(
+  db: Awaited<ReturnType<typeof getDb>>,
+  departmentName: string,
+  departmentCode: string,
+  semester: number,
+) {
+  const titles = semesterTemplateTitles(semester, departmentCode);
+  const courseIds: ObjectId[] = [];
+  for (const [index, title] of titles.entries()) {
+    const code = generatedSemesterCourseCode(departmentCode, semester, index);
+    await db.collection('courses').updateOne(
+      { code },
+      {
+        $set: {
+          code,
+          title,
+          department: departmentName,
+          semester,
+          credits: 4,
+          updated_at: new Date(),
+        },
+        $setOnInsert: {
+          faculty_id: null,
+          created_at: new Date(),
+        },
+      },
+      { upsert: true },
+    );
+    const course = await db.collection('courses').findOne({ code });
+    if (course?._id instanceof ObjectId) {
+      courseIds.push(course._id);
+    }
+  }
+  return courseIds;
+}
+
+async function createExamSchedulesForSemester(
+  db: Awaited<ReturnType<typeof getDb>>,
+  departmentName: string,
+  semester: number,
+  courseIds: ObjectId[],
+) {
+  if (!courseIds.length) return;
+  const courses = await db.collection('courses').find({ _id: { $in: courseIds } }).sort({ code: 1 }).limit(2).toArray();
+  for (const [index, course] of courses.entries()) {
+    const examType = index === 0 ? 'mid' : 'final';
+    const month = String(((semester + 1) % 12) + 1).padStart(2, '0');
+    const day = String(10 + index * 5).padStart(2, '0');
+    await db.collection('exam_schedules').updateOne(
+      { department: departmentName, semester, subject_code: course.code, exam_type: examType },
+      {
+        $set: {
+          department: departmentName,
+          semester,
+          subject_code: course.code,
+          subject_title: course.title,
+          exam_date: `2026-${month}-${day}`,
+          exam_time: index === 0 ? '10:00 AM - 1:00 PM' : '2:00 PM - 5:00 PM',
+          exam_type: examType,
+          updated_at: new Date(),
+        },
+        $setOnInsert: { created_at: new Date() },
+      },
+      { upsert: true },
+    );
+  }
+}
+
+async function deleteStudentCascade(
+  db: Awaited<ReturnType<typeof getDb>>,
+  student: Record<string, unknown>,
+) {
+  const studentId = asObjectId(student._id);
+  const studentUserId = asObjectId(student.user_id);
+  if (!studentId || !studentUserId) {
+    throw new Error('Student account link is broken');
+  }
+
+  const submissions = await db.collection('assignment_submissions').find({ student_id: studentId }).toArray();
+  const submissionFileIds = uniqueObjectIds(submissions.map((entry) => entry.submission_file_id));
+
+  await Promise.all([
+    db.collection('students').deleteOne({ _id: studentId }),
+    db.collection('users').deleteOne({ _id: studentUserId, role: 'student' }),
+    db.collection('enrollments').deleteMany({ student_id: studentId }),
+    db.collection('attendance').deleteMany({ student_id: studentId }),
+    db.collection('fee_ledgers').deleteMany({ student_id: studentId }),
+    db.collection('hall_tickets').deleteMany({ student_id: studentId }),
+    db.collection('results').deleteMany({ student_id: studentId }),
+    db.collection('face_profiles').deleteMany({ student_id: studentId }),
+    db.collection('assignment_submissions').deleteMany({ student_id: studentId }),
+    db.collection('credential_vault').deleteOne({ user_id: studentUserId }),
+    db.collection('registration_requests').deleteMany({
+      $or: [{ approved_user_id: studentUserId }, { approved_student_id: studentId }],
+    }),
+  ]);
+
+  await deleteFileBlobsByIds(db, submissionFileIds);
+}
+
+async function deleteFacultyCascade(
+  db: Awaited<ReturnType<typeof getDb>>,
+  faculty: Record<string, unknown>,
+) {
+  const facultyId = asObjectId(faculty._id);
+  const facultyUserId = asObjectId(faculty.user_id);
+  if (!facultyId || !facultyUserId) {
+    throw new Error('Faculty account link is broken');
+  }
+
+  const facultyCourses = await db.collection('courses').find({ faculty_id: facultyId }).toArray();
+  const facultyCourseIds = uniqueObjectIds(facultyCourses.map((course) => course._id));
+  const assignmentQuery =
+    facultyCourseIds.length > 0
+      ? { $or: [{ teacher_user_id: facultyUserId }, { course_id: { $in: facultyCourseIds } }] }
+      : { teacher_user_id: facultyUserId };
+  const assignmentRows = await db.collection('assignments').find(assignmentQuery).toArray();
+  const assignmentIds = uniqueObjectIds(assignmentRows.map((row) => row._id));
+  const assignmentFileIds = uniqueObjectIds(assignmentRows.map((row) => row.attachment_file_id));
+  const submissionRows = assignmentIds.length ? await db.collection('assignment_submissions').find({ assignment_id: { $in: assignmentIds } }).toArray() : [];
+  const submissionFileIds = uniqueObjectIds(submissionRows.map((row) => row.submission_file_id));
+  const econtentRows = await db
+    .collection('econtents')
+    .find({
+      $or: [{ teacher_user_id: facultyUserId }, { teacher_faculty_id: facultyId }],
+    })
+    .toArray();
+  const econtentFileIds = uniqueObjectIds(econtentRows.map((row) => row.attachment_file_id));
+  const allFileIds = uniqueObjectIds([...assignmentFileIds, ...submissionFileIds, ...econtentFileIds]);
+
+  await Promise.all([
+    db.collection('courses').updateMany(
+      { faculty_id: facultyId },
+      { $set: { faculty_id: null, updated_at: new Date() } },
+    ),
+    db.collection('attendance_sessions').deleteMany({ started_by: facultyUserId }),
+    db.collection('attendance').deleteMany({ marked_by: facultyUserId }),
+    db.collection('assignments').deleteMany(assignmentIds.length ? { _id: { $in: assignmentIds } } : { _id: { $in: [] } }),
+    db.collection('assignment_submissions').deleteMany(assignmentIds.length ? { assignment_id: { $in: assignmentIds } } : { _id: { $in: [] } }),
+    db.collection('econtents').deleteMany({
+      $or: [{ teacher_user_id: facultyUserId }, { teacher_faculty_id: facultyId }],
+    }),
+    db.collection('notices').deleteMany({ created_by: facultyUserId, created_by_role: 'teacher' }),
+    db.collection('results').deleteMany({ generated_by: facultyUserId }),
+    db.collection('extra_classes').deleteMany({
+      $or: [{ created_by: facultyUserId }, { created_by_faculty_id: facultyId }],
+    }),
+    db.collection('salary_records').deleteMany({ faculty_id: facultyId }),
+    db.collection('faculty').deleteOne({ _id: facultyId }),
+    db.collection('users').deleteOne({ _id: facultyUserId, role: 'teacher' }),
+    db.collection('credential_vault').deleteOne({ user_id: facultyUserId }),
+  ]);
+
+  await deleteFileBlobsByIds(db, allFileIds);
+}
+
+async function deleteDatabaseRecord(
+  db: Awaited<ReturnType<typeof getDb>>,
+  collectionName: DatabaseDeletableCollection,
+  recordId: string,
+) {
+  const targetId = oid(recordId, 'record_id');
+
+  if (collectionName === 'assignments') {
+    const assignment = await db.collection('assignments').findOne({ _id: targetId });
+    if (!assignment) return false;
+    const submissions = await db.collection('assignment_submissions').find({ assignment_id: targetId }).toArray();
+    const submissionFileIds = uniqueObjectIds(submissions.map((entry) => entry.submission_file_id));
+    const assignmentFileIds = uniqueObjectIds([assignment.attachment_file_id]);
+    await Promise.all([
+      db.collection('assignment_submissions').deleteMany({ assignment_id: targetId }),
+      db.collection('assignments').deleteOne({ _id: targetId }),
+    ]);
+    await deleteFileBlobsByIds(db, uniqueObjectIds([...assignmentFileIds, ...submissionFileIds]));
+    return true;
+  }
+
+  if (collectionName === 'econtents') {
+    const econtent = await db.collection('econtents').findOne({ _id: targetId });
+    if (!econtent) return false;
+    const fileIds = uniqueObjectIds([econtent.attachment_file_id]);
+    await db.collection('econtents').deleteOne({ _id: targetId });
+    await deleteFileBlobsByIds(db, fileIds);
+    return true;
+  }
+
+  if (collectionName === 'courses') {
+    const course = await db.collection('courses').findOne({ _id: targetId });
+    if (!course) return false;
+
+    const assignments = await db.collection('assignments').find({ course_id: targetId }).toArray();
+    const assignmentIds = uniqueObjectIds(assignments.map((item) => item._id));
+    const assignmentFileIds = uniqueObjectIds(assignments.map((item) => item.attachment_file_id));
+    const submissions = assignmentIds.length ? await db.collection('assignment_submissions').find({ assignment_id: { $in: assignmentIds } }).toArray() : [];
+    const submissionFileIds = uniqueObjectIds(submissions.map((entry) => entry.submission_file_id));
+    const econtents = await db.collection('econtents').find({ course_id: targetId }).toArray();
+    const econtentFileIds = uniqueObjectIds(econtents.map((item) => item.attachment_file_id));
+
+    await Promise.all([
+      db.collection('enrollments').deleteMany({ course_id: targetId }),
+      db.collection('attendance').deleteMany({ course_id: targetId }),
+      db.collection('attendance_sessions').deleteMany({ course_id: targetId }),
+      db.collection('results').deleteMany({ course_id: targetId }),
+      db.collection('assignments').deleteMany({ course_id: targetId }),
+      db.collection('assignment_submissions').deleteMany(assignmentIds.length ? { assignment_id: { $in: assignmentIds } } : { _id: { $in: [] } }),
+      db.collection('econtents').deleteMany({ course_id: targetId }),
+      db.collection('extra_classes').deleteMany({ course_id: targetId }),
+      db.collection('exam_schedules').deleteMany({
+        department: String(course.department || ''),
+        semester: Number(course.semester || 0),
+        subject_code: String(course.code || ''),
+      }),
+      db.collection('courses').deleteOne({ _id: targetId }),
+    ]);
+    await deleteFileBlobsByIds(db, uniqueObjectIds([...assignmentFileIds, ...submissionFileIds, ...econtentFileIds]));
+    return true;
+  }
+
+  const deleted = await db.collection(collectionName).deleteOne({ _id: targetId });
+  return deleted.deletedCount > 0;
 }
 
 async function assignDepartmentSubjectsToFaculty(
@@ -232,7 +519,7 @@ export async function POST(request: Request) {
       const fullName = String(payload.full_name || '').trim();
       const enrollmentNumber = String(payload.enrollment_number || '').trim();
       const department = String(payload.department || '').trim();
-      const year = Number(payload.year || 1);
+      const year = normalizeYear(payload.year, 1);
       const gender = String(payload.gender || '').trim();
       const studentPhone = String(payload.student_phone || '').trim();
       const parentName = String(payload.parent_name || '').trim();
@@ -287,7 +574,7 @@ export async function POST(request: Request) {
       const fullName = String(payload.full_name || '').trim();
       const enrollmentNumber = String(payload.enrollment_number || '').trim();
       const department = String(payload.department || '').trim();
-      const year = Number(payload.year || 1);
+      const year = normalizeYear(payload.year, 1);
       const gender = String(payload.gender || '').trim();
       const studentPhone = String(payload.student_phone || '').trim();
       const parentName = String(payload.parent_name || '').trim();
@@ -342,22 +629,9 @@ export async function POST(request: Request) {
 
       const student = await db.collection('students').findOne({ _id: oid(studentId) }).catch(() => null);
       if (!student) return jsonError('Student not found', 404);
-      const studentUserId = student.user_id instanceof ObjectId ? student.user_id : null;
-      if (!studentUserId) return jsonError('Student account link is broken', 400);
-
-      await Promise.all([
-        db.collection('students').deleteOne({ _id: student._id }),
-        db.collection('users').deleteOne({ _id: studentUserId, role: 'student' }),
-        db.collection('enrollments').deleteMany({ student_id: student._id }),
-        db.collection('attendance').deleteMany({ student_id: student._id }),
-        db.collection('fee_ledgers').deleteMany({ student_id: student._id }),
-        db.collection('hall_tickets').deleteMany({ student_id: student._id }),
-        db.collection('results').deleteMany({ student_id: student._id }),
-        db.collection('face_profiles').deleteMany({ student_id: student._id }),
-        db.collection('assignment_submissions').deleteMany({ student_id: student._id }),
-        db.collection('credential_vault').deleteOne({ user_id: studentUserId }),
-      ]);
-      return jsonOk({ message: 'Student deleted' });
+      if (!asObjectId(student.user_id)) return jsonError('Student account link is broken', 400);
+      await deleteStudentCascade(db, student);
+      return jsonOk({ message: 'Student and all linked data deleted' });
     }
 
     if (action === 'admin.create_faculty') {
@@ -461,21 +735,9 @@ export async function POST(request: Request) {
       if (!facultyId) return jsonError('faculty_id is required', 400);
       const faculty = await db.collection('faculty').findOne({ _id: oid(facultyId) }).catch(() => null);
       if (!faculty) return jsonError('Faculty not found', 404);
-      const facultyUserId = faculty.user_id instanceof ObjectId ? faculty.user_id : null;
-      if (!facultyUserId) return jsonError('Faculty account link is broken', 400);
-
-      await Promise.all([
-        db.collection('courses').updateMany(
-          { faculty_id: faculty._id },
-          { $set: { faculty_id: null, updated_at: new Date() } },
-        ),
-        db.collection('salary_records').deleteMany({ faculty_id: faculty._id }),
-        db.collection('faculty').deleteOne({ _id: faculty._id }),
-        db.collection('users').deleteOne({ _id: facultyUserId, role: 'teacher' }),
-        db.collection('credential_vault').deleteOne({ user_id: facultyUserId }),
-      ]);
-
-      return jsonOk({ message: 'Faculty deleted' });
+      if (!asObjectId(faculty.user_id)) return jsonError('Faculty account link is broken', 400);
+      await deleteFacultyCascade(db, faculty);
+      return jsonOk({ message: 'Faculty and all linked data deleted' });
     }
 
     if (action === 'superadmin.assign_department_subjects') {
@@ -520,6 +782,83 @@ export async function POST(request: Request) {
       );
 
       return jsonOk({ message: 'Subject assigned to faculty' });
+    }
+
+    if (action === 'superadmin.add_department_semester') {
+      if (user.role !== 'superadmin') return jsonError('Forbidden', 403);
+      const departmentName = String(payload.department || '').trim();
+      const targetYear = normalizeYear(payload.year, 1);
+      const semester = normalizeSemester(payload.semester, targetYear * 2);
+      const section = String(payload.section || 'A').trim().toUpperCase() || 'A';
+      const roomNumber = String(payload.room_number || '').trim();
+
+      if (!departmentName) return jsonError('department is required', 400);
+      if (!isDepartmentAllowed(departmentName)) return jsonError('Select a valid department', 400);
+
+      const departmentDoc = await db.collection('departments').findOne({ name: departmentName }).catch(() => null);
+      if (!departmentDoc) return jsonError('Department not found', 404);
+      const departmentCode = String(departmentDoc.code || '').trim().toUpperCase();
+      if (!departmentCode) return jsonError('Department code is missing', 400);
+
+      const classEntry = {
+        semester,
+        section,
+        room: roomNumber || `${departmentCode}-${String(semester).padStart(2, '0')}01`,
+      };
+
+      await db.collection('departments').updateOne(
+        { _id: departmentDoc._id },
+        { $pull: { classes: { semester, section } } } as any,
+      );
+      await db.collection('departments').updateOne(
+        { _id: departmentDoc._id },
+        ({
+          $push: { classes: classEntry },
+          $set: { updated_at: new Date() },
+        } as any),
+      );
+
+      const courseIds = await seedDepartmentSemesterCourses(db, departmentName, departmentCode, semester);
+      await createExamSchedulesForSemester(db, departmentName, semester, courseIds);
+
+      const students = await db.collection('students').find({ department: departmentName }).toArray();
+      let studentsMatched = 0;
+      let enrollmentsCreated = 0;
+      for (const student of students) {
+        if (maxSemesterFromYear(student.year) < semester) continue;
+        studentsMatched += 1;
+        for (const courseId of courseIds) {
+          const result = await db.collection('enrollments').updateOne(
+            { student_id: student._id, course_id: courseId },
+            { $setOnInsert: { created_at: new Date() } },
+            { upsert: true },
+          );
+          if (result.upsertedCount > 0) enrollmentsCreated += 1;
+        }
+      }
+
+      return jsonOk({
+        message: `Semester ${semester} added for ${departmentCode}. Courses synced and ${enrollmentsCreated} enrollment(s) created.`,
+        semester,
+        department: departmentName,
+        year: targetYear,
+        students_matched: studentsMatched,
+        enrollments_created: enrollmentsCreated,
+      });
+    }
+
+    if (action === 'superadmin.database_delete') {
+      if (user.role !== 'superadmin') return jsonError('Forbidden', 403);
+      const collectionRaw = String(payload.collection || '').trim();
+      const recordId = String(payload.record_id || '').trim();
+      if (!collectionRaw || !recordId) return jsonError('collection and record_id are required', 400);
+      const collection = DATABASE_DELETABLE_COLLECTIONS.find((entry) => entry === collectionRaw);
+      if (!collection) {
+        return jsonError('Collection is not allowed for database delete', 400);
+      }
+      const deleted = await deleteDatabaseRecord(db, collection, recordId).catch(() => false);
+      if (!deleted) return jsonError('Record not found', 404);
+      return jsonOk({ message: `Record deleted from ${collection}` });
     }
 
     if (action === 'superadmin.create_superadmin') {
@@ -619,10 +958,12 @@ export async function POST(request: Request) {
       const title = String(payload.title || '').trim();
       const facultyId = String(payload.faculty_id || '').trim();
       const department = String(payload.department || '').trim();
-      const semester = Number(payload.semester || 1);
-      const credits = Number(payload.credits || 4);
+      const semester = normalizeSemester(payload.semester, 1);
+      const creditsRaw = Number(payload.credits || 4);
       if (!code || !title) return jsonError('Code and title are required', 400);
       if (department && !isDepartmentAllowed(department)) return jsonError('Select a valid department', 400);
+      if (!Number.isFinite(creditsRaw) || creditsRaw <= 0) return jsonError('Credits must be a positive number', 400);
+      const credits = Math.max(1, Math.floor(creditsRaw));
 
       const insertedCourse = await db.collection('courses').insertOne({
         code,
@@ -644,9 +985,11 @@ export async function POST(request: Request) {
       if (!faculty) return jsonError('Faculty profile missing', 404);
       const code = String(payload.code || '').trim().toUpperCase();
       const title = String(payload.title || '').trim();
-      const semester = Number(payload.semester || 1);
-      const credits = Number(payload.credits || 4);
+      const semester = normalizeSemester(payload.semester, 1);
+      const creditsRaw = Number(payload.credits || 4);
       if (!code || !title) return jsonError('Code and title are required', 400);
+      if (!Number.isFinite(creditsRaw) || creditsRaw <= 0) return jsonError('Credits must be a positive number', 400);
+      const credits = Math.max(1, Math.floor(creditsRaw));
 
       const insertedCourse = await db.collection('courses').insertOne({
         code,
@@ -1182,6 +1525,62 @@ export async function POST(request: Request) {
       });
 
       return jsonOk({ message: 'Student notice published' });
+    }
+
+    if (action === 'teacher.create_extra_class') {
+      if (user.role !== 'teacher') return jsonError('Forbidden', 403);
+      const faculty = await db.collection('faculty').findOne({ user_id: user._id });
+      if (!faculty) return jsonError('Faculty profile missing', 404);
+
+      const courseId = String(payload.course_id || '').trim();
+      const classDate = String(payload.class_date || new Date().toISOString().slice(0, 10)).trim();
+      const classTime = String(payload.class_time || '').trim();
+      const section = String(payload.section || 'A').trim().toUpperCase() || 'A';
+      const roomNumber = String(payload.room_number || '').trim();
+      const note = String(payload.note || '').trim();
+      const departmentRaw = String(payload.department || '').trim();
+
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(classDate)) return jsonError('class_date must be YYYY-MM-DD', 400);
+      if (!classTime) return jsonError('class_time is required', 400);
+
+      let mappedCourse: Record<string, unknown> | null = null;
+      if (courseId) {
+        mappedCourse = await db.collection('courses').findOne({ _id: oid(courseId) }).catch(() => null);
+        if (!mappedCourse) return jsonError('Course not found', 404);
+        if (String(mappedCourse.faculty_id || '') !== String(faculty._id)) {
+          return jsonError('You can create extra class only for your assigned subject', 403);
+        }
+      }
+
+      const department = departmentRaw || String(mappedCourse?.department || '');
+      if (!department || !isDepartmentAllowed(department)) return jsonError('Select a valid department', 400);
+      const semester = normalizeSemester(payload.semester, Number(mappedCourse?.semester || 1));
+
+      const courseCode = String(payload.course_code || mappedCourse?.code || '').trim().toUpperCase();
+      const courseTitle = String(payload.course_title || mappedCourse?.title || '').trim();
+      if (!courseCode || !courseTitle) {
+        return jsonError('Provide course subject details for extra class', 400);
+      }
+
+      const room = roomNumber || `${String(department).slice(0, 3).toUpperCase()}-${String(semester).padStart(2, '0')}X`;
+      await db.collection('extra_classes').insertOne({
+        course_id: mappedCourse?._id instanceof ObjectId ? mappedCourse._id : null,
+        department,
+        semester,
+        section,
+        room_number: room,
+        class_date: classDate,
+        class_time: classTime,
+        course_code: courseCode,
+        course_title: courseTitle,
+        note: note || null,
+        created_by: user._id,
+        created_by_faculty_id: faculty._id,
+        created_at: new Date(),
+        updated_at: new Date(),
+      });
+
+      return jsonOk({ message: 'Extra class created and added to daily schedule' });
     }
 
     if (action === 'student.submit_assignment') {
