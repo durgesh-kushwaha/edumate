@@ -915,12 +915,6 @@ a {
 @media (max-width: 640px) {
 
   /* ── Global spacing ─────────────────────────── */
-  html,
-  body {
-    overflow-x: hidden;
-    max-width: 100vw;
-  }
-
   .app-bg,
   .app-shell {
     max-width: 100vw;
@@ -930,6 +924,7 @@ a {
   .portal-root {
     padding: 0 10px calc(20px + env(safe-area-inset-bottom));
     max-width: 100vw;
+    overflow-x: clip;
   }
 
   .portal-content {
@@ -1037,6 +1032,8 @@ a {
     border-radius: 14px;
     padding: 14px 12px;
     box-shadow: 0 6px 18px rgba(30, 56, 103, 0.06);
+    max-width: 100%;
+    overflow: visible;
   }
 
   .card h2 {
@@ -1078,6 +1075,8 @@ a {
     margin-left: -2px;
     margin-right: -2px;
     overscroll-behavior-x: contain;
+    max-width: calc(100vw - 20px);
+    overflow-x: auto;
   }
 
   .data-table {
