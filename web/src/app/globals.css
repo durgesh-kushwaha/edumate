@@ -20,6 +20,26 @@
   box-sizing: border-box;
 }
 
+/* ─── Performance base ──────────────────────────────────── */
+html {
+  scroll-behavior: smooth;
+  -webkit-tap-highlight-color: transparent;
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 html,
 body {
   margin: 0;
@@ -43,6 +63,7 @@ a {
 .app-bg {
   min-height: 100vh;
   position: relative;
+  contain: layout style;
 }
 
 .app-shell {
@@ -206,6 +227,8 @@ a {
   font-size: 0.9rem;
   white-space: nowrap;
   flex: 0 0 auto;
+  transform: translateZ(0);
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
 
 .tab-pill.active {
@@ -243,6 +266,8 @@ a {
   border-radius: 18px;
   padding: 16px;
   box-shadow: 0 10px 28px rgba(30, 56, 103, 0.08);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 200px;
 }
 
 .hero-banner {
@@ -309,6 +334,8 @@ a {
   padding: 14px;
   background: linear-gradient(130deg, #f2f8ff, #e7f1ff);
   border: 1px solid #c6d8f6;
+  transform: translateZ(0);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
 
 .stat-card p {
@@ -355,7 +382,7 @@ a {
   font-size: 0.96rem;
   padding: 11px 12px;
   outline: none;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
 .input:focus,
@@ -391,15 +418,26 @@ a {
   font-weight: 600;
   font-size: 0.92rem;
   text-decoration: none;
+  transform: translateZ(0);
+  transition: background 0.12s ease, transform 0.1s ease, opacity 0.1s ease;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .btn-primary {
   color: #eef4ff;
   background: linear-gradient(130deg, #0b63df, #0948a8);
+  will-change: transform;
 }
 
 .btn-primary:hover {
   background: linear-gradient(130deg, #0858c8, #083f92);
+  transform: translateY(-1px) translateZ(0);
+}
+
+.btn:active {
+  transform: scale(0.97) translateZ(0);
+  opacity: 0.9;
 }
 
 .btn-secondary {
@@ -440,6 +478,8 @@ a {
   overflow-x: auto;
   border: 1px solid #c8d7f2;
   border-radius: 12px;
+  -webkit-overflow-scrolling: touch;
+  transform: translateZ(0);
 }
 
 .data-table {
@@ -609,6 +649,8 @@ a {
   display: grid;
   gap: 6px;
   color: #0f2b56;
+  transform: translateZ(0);
+  transition: transform 0.12s ease, border-color 0.12s ease;
 }
 
 .department-card-btn strong {
@@ -633,7 +675,7 @@ a {
 
 .department-card-btn:hover {
   border-color: #7fa5de;
-  transform: translateY(-1px);
+  transform: translateY(-1px) translateZ(0);
 }
 
 .modal-backdrop {
@@ -645,6 +687,8 @@ a {
   align-items: center;
   justify-content: center;
   padding: 18px;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
 }
 
 .modal-card {
@@ -656,6 +700,8 @@ a {
   border-radius: 16px;
   padding: 16px;
   box-shadow: 0 22px 50px rgba(0, 14, 40, 0.32);
+  -webkit-overflow-scrolling: touch;
+  transform: translateZ(0);
 }
 
 .modal-head {
@@ -698,11 +744,12 @@ a {
 .day-card-btn {
   text-align: left;
   cursor: pointer;
-  transition: transform 0.15s ease, border-color 0.15s ease;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+  transform: translateZ(0);
 }
 
 .day-card-btn:hover {
-  transform: translateY(-1px);
+  transform: translateY(-1px) translateZ(0);
   border-color: #87aee6;
 }
 
@@ -836,7 +883,9 @@ a {
   }
 }
 
+/* ─── Tablet breakpoint ─────────────────────────────────── */
 @media (max-width: 980px) {
+
   .form-grid.two,
   .form-grid.three,
   .grid-2,
@@ -845,59 +894,555 @@ a {
   }
 
   .data-table {
-    min-width: 620px;
+    min-width: 580px;
+  }
+
+  .stats-grid.six {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .hero-banner {
+    grid-template-columns: 1fr;
+  }
+
+  .modal-card {
+    width: min(96vw, 100%);
   }
 }
 
+/* ─── Mobile breakpoint ─────────────────────────────────── */
 @media (max-width: 640px) {
+
+  /* ── Global spacing ─────────────────────────── */
+  .portal-root {
+    padding: 0 10px 20px;
+  }
+
+  .portal-content {
+    margin-top: 12px;
+  }
+
+  .stack {
+    gap: 12px;
+  }
+
+  /* ── Auth screen ────────────────────────────── */
   .auth-shell {
-    padding: 20px 12px;
+    padding: 16px 8px;
+    align-items: flex-start;
   }
 
-  .auth-card,
-  .card {
+  .auth-card {
+    border-radius: 16px;
+    padding: 16px 14px;
+    width: 100%;
+    box-shadow: 0 12px 32px rgba(14, 34, 73, 0.1);
+  }
+
+  .brand-head h1 {
+    font-size: 1.7rem;
+  }
+
+  .brand-head p {
+    font-size: 0.88rem;
+  }
+
+  .switch-row {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .switch-btn {
+    flex: 1;
+    text-align: center;
+    font-size: 0.88rem;
+    padding: 9px 10px;
+  }
+
+  /* ── Shell header ───────────────────────────── */
+  .shell-header {
+    margin-top: 10px;
     border-radius: 14px;
+    padding: 14px 12px;
+    gap: 12px;
   }
 
-  .tab-pill {
-    padding: 7px 11px;
-    font-size: 0.84rem;
+  .brand-block h1 {
+    font-size: 1.15rem;
   }
 
+  .brand-block p {
+    font-size: 0.72rem;
+  }
+
+  /* ── Tab navigation: horizontal scroll ──────── */
   .tab-nav {
     flex-wrap: nowrap;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     padding-bottom: 4px;
+    gap: 6px;
+    scrollbar-width: none;
+    /* Firefox */
+    -ms-overflow-style: none;
+    /* IE / Edge */
   }
 
-  .btn {
-    width: 100%;
-    text-align: center;
+  .tab-nav::-webkit-scrollbar {
+    display: none;
+    /* Chrome / Safari */
   }
 
+  .tab-pill {
+    padding: 8px 12px;
+    font-size: 0.82rem;
+    min-height: 38px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  /* ── Header user info ───────────────────────── */
   .header-right {
-    flex-direction: column;
-    align-items: flex-start;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.88rem;
+    width: 100%;
+  }
+
+  .header-right span {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .header-right .btn {
     width: auto;
+    flex-shrink: 0;
+  }
+
+  /* ── Cards ──────────────────────────────────── */
+  .card {
+    border-radius: 14px;
+    padding: 14px 12px;
+    box-shadow: 0 6px 18px rgba(30, 56, 103, 0.06);
+  }
+
+  .card h2 {
+    font-size: 1.1rem;
+  }
+
+  .card h3 {
+    font-size: 0.94rem;
+  }
+
+  /* ── Stat grids ─────────────────────────────── */
+  .stats-grid.four,
+  .stats-grid.three {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .stats-grid.six {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .stat-card {
+    padding: 12px 10px;
+    border-radius: 12px;
+  }
+
+  .stat-card h3 {
+    font-size: 1.2rem;
+  }
+
+  .stat-card p {
+    font-size: 0.8rem;
+  }
+
+  /* ── Data tables ────────────────────────────── */
+  .table-wrap {
+    border-radius: 10px;
+    margin-left: -2px;
+    margin-right: -2px;
+  }
+
+  .data-table {
+    min-width: 480px;
+    font-size: 0.82rem;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: 8px 8px;
+    font-size: 0.82rem;
+  }
+
+  .data-table thead th {
+    font-size: 0.74rem;
+    padding: 8px;
+  }
+
+  /* ── Forms ──────────────────────────────────── */
+  .form-grid {
+    gap: 8px;
+  }
+
+  .form-grid.two,
+  .form-grid.three {
+    grid-template-columns: 1fr;
+  }
+
+  .input,
+  .select,
+  .textarea {
+    font-size: 0.92rem;
+    padding: 12px;
+    border-radius: 10px;
+    min-height: 44px;
+  }
+
+  .textarea {
+    min-height: 72px;
+  }
+
+  .password-wrap {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  /* ── Buttons: touch-friendly ────────────────── */
+  .btn {
+    width: 100%;
+    text-align: center;
+    padding: 12px 14px;
+    font-size: 0.9rem;
+    min-height: 44px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .btn.mini {
+    padding: 9px 12px;
+    font-size: 0.82rem;
+    min-height: 40px;
   }
 
   .inline-actions {
     flex-direction: column;
     align-items: stretch;
+    gap: 6px;
   }
 
-  .password-wrap {
+  .inline-actions .btn,
+  .inline-actions .btn.mini {
+    width: 100%;
+  }
+
+  .inline-link {
+    display: block;
+    width: 100%;
+  }
+
+  /* ── Video sections ─────────────────────────── */
+  .video-wrap {
+    border-radius: 12px;
+    min-height: 220px;
+  }
+
+  .video {
+    min-height: 220px;
+  }
+
+  .video-wide {
+    max-height: 260px;
+  }
+
+  /* ── Modals: near full-screen ───────────────── */
+  .modal-backdrop {
+    padding: 8px;
+    align-items: flex-end;
+  }
+
+  .modal-card {
+    width: 100%;
+    max-height: 92vh;
+    border-radius: 18px 18px 14px 14px;
+    padding: 14px 12px;
+    box-shadow: 0 -8px 40px rgba(0, 14, 40, 0.28);
+  }
+
+  .modal-head {
+    margin-bottom: 10px;
+    gap: 8px;
+  }
+
+  .modal-head h3 {
+    font-size: 1rem;
+  }
+
+  /* ── Soft panels ────────────────────────────── */
+  .soft-panel {
+    padding: 10px;
+    border-radius: 12px;
+  }
+
+  /* ── Department grid ────────────────────────── */
+  .department-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .department-card-btn {
+    padding: 12px 10px;
+    border-radius: 12px;
+  }
+
+  .department-card-btn strong {
+    font-size: 0.9rem;
+  }
+
+  .department-card-btn p {
+    font-size: 0.8rem;
+  }
+
+  /* ── Manual student grid ────────────────────── */
+  .manual-student-grid {
+    gap: 8px;
+  }
+
+  .manual-student-card {
+    flex: 1 1 calc(50% - 4px);
+    max-width: 100%;
+    padding: 10px;
+    border-radius: 10px;
+  }
+
+  /* ── Badges ─────────────────────────────────── */
+  .badge {
+    font-size: 0.72rem;
+    padding: 4px 8px;
+  }
+
+  /* ── Result graph ───────────────────────────── */
+  .result-graph {
+    padding: 10px 8px;
+    gap: 10px;
+    min-height: 180px;
+  }
+
+  .result-bar-col {
+    min-width: 56px;
+  }
+
+  .result-bar-track {
+    width: 34px;
+    height: 120px;
+    border-radius: 8px;
+  }
+
+  /* ── Assignment/e-content cards ──────────────── */
+  .assignment-card {
+    padding: 10px;
+    border-radius: 10px;
+  }
+
+  /* ── Hall ticket ────────────────────────────── */
+  .hall-ticket {
+    padding: 12px;
+    border-radius: 10px;
+    font-size: 0.9rem;
+  }
+
+  /* ── Checkbox lines ─────────────────────────── */
+  .checkbox-line {
+    font-size: 0.88rem;
+    gap: 6px;
+  }
+
+  /* ── Hero banner ────────────────────────────── */
+  .hero-banner {
     grid-template-columns: 1fr;
   }
 
+  .hero-img {
+    max-height: 140px;
+    border-radius: 10px;
+  }
+
+  /* ── Clean list ─────────────────────────────── */
+  .clean-list {
+    gap: 6px;
+  }
+
+  .subject-pill {
+    padding: 10px;
+    font-size: 0.9rem;
+    min-height: 42px;
+  }
+
+  /* ── Detected items ─────────────────────────── */
+  .detected-item {
+    padding: 8px;
+    border-radius: 8px;
+  }
+
+  .detected-name {
+    font-size: 0.9rem;
+  }
+
+  /* ── Toast ──────────────────────────────────── */
+  .toast {
+    left: 10px;
+    right: 10px;
+    bottom: 12px;
+    min-width: unset;
+    max-width: unset;
+    border-radius: 10px;
+    font-size: 0.88rem;
+    padding: 12px 14px;
+  }
+
+  /* ── Footer ─────────────────────────────────── */
   .site-footer-inner {
     flex-direction: column;
+    gap: 4px;
+    align-items: center;
+    text-align: center;
+    padding: 10px 12px;
+    font-size: 0.78rem;
+  }
+
+  /* ── Day card button ────────────────────────── */
+  .day-card-btn {
+    padding: 10px;
+  }
+
+  /* ── Scan result panels ─────────────────────── */
+  .scan-success,
+  .scan-fail {
+    padding: 10px;
+    border-radius: 10px;
+  }
+
+  /* ── Grid 2-col for timetable on mobile ─────── */
+  .grid-2 {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .grid-3 {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  /* ── Error text ─────────────────────────────── */
+  .error-text {
+    font-size: 0.86rem;
+  }
+
+  /* ── Loading screen ─────────────────────────── */
+  .loader {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+/* ─── Very small screen (iPhone SE / 5) ─────────────────── */
+@media (max-width: 400px) {
+  .portal-root {
+    padding: 0 6px 16px;
+  }
+
+  .stats-grid.four,
+  .stats-grid.three,
+  .stats-grid.six {
+    grid-template-columns: 1fr;
     gap: 6px;
-    align-items: flex-start;
+  }
+
+  .department-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .shell-header {
+    padding: 12px 10px;
+    border-radius: 12px;
+  }
+
+  .tab-pill {
+    font-size: 0.78rem;
+    padding: 7px 10px;
+  }
+
+  .card {
+    padding: 12px 10px;
+    border-radius: 12px;
+  }
+
+  .card h2 {
+    font-size: 1rem;
+  }
+
+  .auth-card {
+    padding: 14px 10px;
+    border-radius: 14px;
+  }
+
+  .brand-head h1 {
+    font-size: 1.5rem;
+  }
+
+  .modal-backdrop {
+    padding: 4px;
+  }
+
+  .modal-card {
+    border-radius: 14px 14px 10px 10px;
+    padding: 12px 10px;
+    max-height: 94vh;
+  }
+
+  .manual-student-card {
+    flex: 1 1 100%;
+  }
+
+  .data-table {
+    min-width: 420px;
+  }
+
+  .result-bar-col {
+    min-width: 46px;
+  }
+
+  .result-bar-track {
+    width: 28px;
+    height: 100px;
+  }
+
+  .stat-card h3 {
+    font-size: 1.05rem;
+  }
+
+  .btn {
+    padding: 11px 12px;
+    font-size: 0.86rem;
+  }
+
+  .btn.mini {
+    padding: 8px 10px;
+    font-size: 0.8rem;
   }
 }
 

@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/set-state-in-effect, react-hooks/static-components */
 
 import Link from 'next/link';
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 type Dict = Record<string, any>;
 type ToastType = 'success' | 'error' | 'info';
@@ -185,14 +185,14 @@ function PasswordInput({ value, onChange, placeholder, autoComplete = 'new-passw
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string | number }) {
+const StatCard = memo(function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
     <article className="stat-card">
       <p>{label}</p>
       <h3>{value}</h3>
     </article>
   );
-}
+});
 
 function useCamera() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -4279,9 +4279,9 @@ export default function HomePage() {
 
   const role = state?.role;
 
-  const notify = (message: string, type: ToastType = 'info') => {
+  const notify = useCallback((message: string, type: ToastType = 'info') => {
     setToast({ message, type });
-  };
+  }, []);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
