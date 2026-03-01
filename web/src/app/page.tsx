@@ -284,15 +284,32 @@ function ShellHeader({
   onTab: (key: string) => void;
   onLogout: () => void;
 }) {
+  const navRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const activeTab = nav.querySelector<HTMLButtonElement>('.tab-pill.active');
+    if (!activeTab) return;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    activeTab.scrollIntoView({ block: 'nearest', inline: 'center', behavior: reduceMotion ? 'auto' : 'smooth' });
+  }, [active]);
+
   return (
     <header className="shell-header">
       <div className="brand-block">
         <h1>EduMate</h1>
         <p>{roleLabel}</p>
       </div>
-      <nav className="tab-nav">
+      <nav className="tab-nav" ref={navRef} aria-label={`${roleLabel} navigation`}>
         {tabs.map((item) => (
-          <button key={item.key} type="button" className={`tab-pill ${active === item.key ? 'active' : ''}`} onClick={() => onTab(item.key)}>
+          <button
+            key={item.key}
+            type="button"
+            className={`tab-pill ${active === item.key ? 'active' : ''}`}
+            aria-pressed={active === item.key}
+            onClick={() => onTab(item.key)}
+          >
             {item.label}
           </button>
         ))}
