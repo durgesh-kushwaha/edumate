@@ -1103,18 +1103,18 @@ function AdminSuperPortal({
                                 </button>
                               </div>
                               <div className="inline-actions">
-                              <button type="button" className="btn btn-ghost mini" onClick={() => startEditFaculty(row)}>
-                                Edit
-                              </button>
-                              <button type="button" className="btn btn-secondary mini" onClick={() => assignDepartmentSubjects(String(row.faculty?.id || ''), true)}>
-                                Assign Dept Subjects
-                              </button>
-                              <button type="button" className="btn btn-secondary mini" onClick={() => resetUserPassword(String(row.user?.id || ''))}>
-                                Reset Password
-                              </button>
-                              <button type="button" className="btn btn-danger mini" onClick={() => deleteFaculty(String(row.faculty?.id || ''))}>
-                                Delete
-                              </button>
+                                <button type="button" className="btn btn-ghost mini" onClick={() => startEditFaculty(row)}>
+                                  Edit
+                                </button>
+                                <button type="button" className="btn btn-secondary mini" onClick={() => assignDepartmentSubjects(String(row.faculty?.id || ''), true)}>
+                                  Assign Dept Subjects
+                                </button>
+                                <button type="button" className="btn btn-secondary mini" onClick={() => resetUserPassword(String(row.user?.id || ''))}>
+                                  Reset Password
+                                </button>
+                                <button type="button" className="btn btn-danger mini" onClick={() => deleteFaculty(String(row.faculty?.id || ''))}>
+                                  Delete
+                                </button>
                               </div>
                             </div>
                           </td>
@@ -3032,6 +3032,8 @@ function StudentPortal({
   const [dayTimetableModal, setDayTimetableModal] = useState<Dict | null>(null);
   const [resultTypeModal, setResultTypeModal] = useState('');
   const [faceAttendanceOpen, setFaceAttendanceOpen] = useState(false);
+  const [faceScanResult, setFaceScanResult] = useState<Dict | null>(null);
+  const [faceScanLoading, setFaceScanLoading] = useState(false);
   const [assignmentFiles, setAssignmentFiles] = useState<Record<string, File | null>>({});
   const [feeDeclarationForms, setFeeDeclarationForms] = useState<
     Record<string, { declared_status: 'full' | 'partial'; paid_amount: string; reference: string; notes: string }>
@@ -3215,9 +3217,57 @@ function StudentPortal({
     }));
   }
 
+  async function scanStudentFace() {
+    if (!selectedSessionCourseId) {
+      notify('Select an active subject first.', 'error');
+      return;
+    }
+    setFaceScanLoading(true);
+    setFaceScanResult(null);
+    let frame: File;
+    try {
+      frame = await captureStudentFrame(`student-scan-${Date.now()}.jpg`);
+    } catch (error) {
+      notify((error as Error).message, 'error');
+      setFaceScanLoading(false);
+      return;
+    }
+    const form = new FormData();
+    form.append('course_id', selectedSessionCourseId);
+    form.append('image', frame);
+
+    try {
+      const response = await fetch('/api/attendance/student-scan', {
+        method: 'POST',
+        body: form,
+        credentials: 'include',
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setFaceScanResult({ matched: false, message: String(payload.error || 'Face scan failed.') });
+        notify(String(payload.error || 'Face scan failed.'), 'error');
+      } else {
+        setFaceScanResult(payload);
+        if (payload.matched) {
+          notify('Face matched! You can now mark your attendance.', 'success');
+        } else {
+          notify(String(payload.message || 'Face did not match. Try again.'), 'error');
+        }
+      }
+    } catch {
+      setFaceScanResult({ matched: false, message: 'Network error during face scan.' });
+      notify('Network error during face scan.', 'error');
+    }
+    setFaceScanLoading(false);
+  }
+
   async function markAttendanceByFace() {
     if (!selectedSessionCourseId) {
       notify('Select an active subject first.', 'error');
+      return;
+    }
+    if (!faceScanResult?.matched) {
+      notify('Please scan your face first before marking attendance.', 'error');
       return;
     }
     let frame: File;
@@ -3241,9 +3291,10 @@ function StudentPortal({
       notify(String(payload.error || 'Unable to mark attendance.'), 'error');
       return;
     }
-    notify('Attendance marked successfully.', 'success');
+    notify('Attendance marked successfully!', 'success');
     stopStudentCamera();
     setFaceAttendanceOpen(false);
+    setFaceScanResult(null);
     await refresh();
   }
 
@@ -3586,8 +3637,11 @@ function StudentPortal({
                           Stop Camera
                         </button>
                       )}
-                      <button type="button" className="btn btn-primary mini" onClick={markAttendanceByFace} disabled={!studentCameraStream}>
-                        Mark Attendance
+                      <button type="button" className="btn btn-secondary mini" onClick={scanStudentFace} disabled={!studentCameraStream || faceScanLoading}>
+                        {faceScanLoading ? 'Scanning...' : '📷 Scan Face'}
+                      </button>
+                      <button type="button" className="btn btn-primary mini" onClick={markAttendanceByFace} disabled={!studentCameraStream || !faceScanResult?.matched}>
+                        ✅ Mark Attendance
                       </button>
                     </div>
                   </div>
@@ -3602,8 +3656,23 @@ function StudentPortal({
                         Selected Subject:{' '}
                         {activeSessions.find((session: Dict) => String(session.course_id) === String(selectedSessionCourseId))?.course_code || '-'}
                       </p>
-                      <p className="muted small">Detected user will be matched with your registered student face profile only.</p>
-                      <p className="muted small">Keep your face centered and use good lighting before clicking Mark Attendance.</p>
+                      <p className="muted small">Step 1: Start camera and position your face clearly.</p>
+                      <p className="muted small">Step 2: Click &quot;Scan Face&quot; to verify your identity.</p>
+                      <p className="muted small">Step 3: Once matched, click &quot;Mark Attendance&quot; to confirm.</p>
+
+                      {faceScanResult && (
+                        <div className={`top-gap soft-panel ${faceScanResult.matched ? 'scan-success' : 'scan-fail'}`}>
+                          <h3>{faceScanResult.matched ? '✅ Face Matched!' : '❌ Face Not Matched'}</h3>
+                          {faceScanResult.student_name && (
+                            <p><strong>Identified as:</strong> {faceScanResult.student_name}</p>
+                          )}
+                          {faceScanResult.distance !== undefined && (
+                            <p className="muted small">Match distance: {faceScanResult.distance}</p>
+                          )}
+                          <p className="muted small">{faceScanResult.message}</p>
+                        </div>
+                      )}
+
                       <div className="top-gap">
                         <h3>Today Active Subjects</h3>
                         <ul className="clean-list">

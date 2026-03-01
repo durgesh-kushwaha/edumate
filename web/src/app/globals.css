@@ -524,6 +524,24 @@ a {
   padding: 12px;
 }
 
+.scan-success {
+  border-color: #5cc98a;
+  background: linear-gradient(135deg, #e6faf0, #d2f5e3);
+}
+
+.scan-success h3 {
+  color: #0b7a3e;
+}
+
+.scan-fail {
+  border-color: #e8636f;
+  background: linear-gradient(135deg, #fff0f2, #fde1e6);
+}
+
+.scan-fail h3 {
+  color: #b01f40;
+}
+
 .grid-2,
 .grid-3 {
   display: grid;
