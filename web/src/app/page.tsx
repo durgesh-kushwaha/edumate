@@ -217,7 +217,15 @@ function useCamera() {
     }
 
     try {
-      const media = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+      const media = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'user',
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          zoom: 1.0 as any,
+        },
+        audio: false,
+      });
       if (videoRef.current) {
         videoRef.current.srcObject = media;
         await videoRef.current.play().catch(() => null);
