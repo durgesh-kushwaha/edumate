@@ -1040,18 +1040,23 @@ a {
     box-shadow: 0 6px 18px rgba(30, 56, 103, 0.06);
     width: 100%;
     max-width: calc(100vw - 16px);
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
     word-break: break-word;
   }
 
-  /* Force ALL elements inside cards to respect boundaries */
-  .card *:not(.data-table):not(.data-table *),
-  .card *::before,
-  .card *::after {
-    max-width: 100%;
-    box-sizing: border-box;
-  }
-
+  /* Constrain non-table content inside cards */
+  .card>h2,
+  .card>h3,
+  .card>p,
+  .card>form,
+  .card>.stack,
+  .card>.grid-2,
+  .card>.grid-3,
+  .card>.form-grid,
+  .card>.inline-actions,
+  .card>.soft-panel,
   .card .select,
   .card .input,
   .card .textarea,
@@ -1059,13 +1064,10 @@ a {
   .card .video-wrap,
   .card .video,
   .card .soft-panel,
-  .card .inline-actions,
-  .card .stack,
-  .card .grid-2,
-  .card .grid-3,
-  .card .form-grid {
+  .card .inline-actions:not(.table-wrap .inline-actions) {
     width: 100%;
     max-width: 100%;
+    box-sizing: border-box;
   }
 
   .card h2 {
@@ -1106,16 +1108,17 @@ a {
   /* ── Data tables ────────────────────────────── */
   .table-wrap {
     border-radius: 10px;
-    margin-left: -2px;
-    margin-right: -2px;
+    margin: 0 -10px;
+    width: calc(100% + 20px);
     overscroll-behavior-x: contain;
-    max-width: calc(100vw - 20px);
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .data-table {
-    min-width: 480px;
-    font-size: 0.82rem;
+    min-width: 600px;
+    font-size: 0.8rem;
+    width: max-content;
   }
 
   .data-table th,
