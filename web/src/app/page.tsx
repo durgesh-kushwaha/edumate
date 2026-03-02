@@ -222,10 +222,14 @@ function useCamera() {
           facingMode: 'user',
           width: { ideal: 640 },
           height: { ideal: 480 },
-          zoom: 1.0 as any,
         },
         audio: false,
       });
+      // Try to reset zoom to 1x on mobile cameras
+      const track = media.getVideoTracks()[0];
+      if (track) {
+        try { await track.applyConstraints({ advanced: [{ zoom: 1.0 } as any] }); } catch { }
+      }
       if (videoRef.current) {
         videoRef.current.srcObject = media;
         await videoRef.current.play().catch(() => null);
