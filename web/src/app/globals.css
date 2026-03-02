@@ -1040,7 +1040,12 @@ a {
     box-shadow: 0 6px 18px rgba(30, 56, 103, 0.06);
     width: 100%;
     max-width: calc(100vw - 16px);
-    overflow: visible;
+    overflow: hidden;
+    word-break: break-word;
+  }
+
+  .card>* {
+    max-width: 100%;
   }
 
   .card h2 {
