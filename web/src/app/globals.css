@@ -1225,18 +1225,22 @@ a {
   /* ── Video sections ─────────────────────────── */
   .video-wrap {
     border-radius: 12px;
-    min-height: 200px;
-    max-width: calc(100vw - 16px);
+    min-height: 0;
     width: 100%;
+    max-width: 100%;
+    min-width: 0;
   }
 
   .video {
-    min-height: 200px;
+    min-height: 0;
+    height: auto;
     object-fit: contain;
     width: 100%;
+    max-width: 100%;
   }
 
   .video-wide {
+    aspect-ratio: unset;
     max-height: 260px;
   }
 
