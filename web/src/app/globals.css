@@ -1044,7 +1044,27 @@ a {
     word-break: break-word;
   }
 
-  .card>* {
+  /* Force ALL elements inside cards to respect boundaries */
+  .card *:not(.data-table):not(.data-table *),
+  .card *::before,
+  .card *::after {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .card .select,
+  .card .input,
+  .card .textarea,
+  .card .btn,
+  .card .video-wrap,
+  .card .video,
+  .card .soft-panel,
+  .card .inline-actions,
+  .card .stack,
+  .card .grid-2,
+  .card .grid-3,
+  .card .form-grid {
+    width: 100%;
     max-width: 100%;
   }
 
