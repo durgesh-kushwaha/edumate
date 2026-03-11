@@ -1,6 +1,8 @@
 import { jsonOk } from '@/lib/http';
 import { pingPythonHealth } from '@/lib/python';
 
+export const maxDuration = 30;
+
 async function warmup() {
   const response = await pingPythonHealth();
   return jsonOk({

@@ -1,6 +1,9 @@
 import { callPython } from '@/lib/python';
 import { ensureDbSetup, getDb, oid } from '@/lib/db';
 import { jsonError, jsonOk, requireUser } from '@/lib/http';
+import { shrinkImage, computeDescriptor, euclideanDistance, MATCH_THRESHOLD } from '@/lib/face';
+
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
   try {
@@ -36,19 +39,33 @@ export async function POST(request: Request) {
     const already = await db.collection('attendance').findOne({ student_id: student._id, course_id: course._id, attendance_date: today });
     if (already) return jsonError('Attendance already marked for today', 409);
 
-    const buffer = Buffer.from(await image.arrayBuffer());
-    const verifyResponse = await callPython('/verify-self', {
+    const rawBuf = Buffer.from(await image.arrayBuffer());
+    const smallBuf = await shrinkImage(rawBuf, 320);
+
+    /* --- try Python first --- */
+    const pyRes = await callPython('/verify-self', {
       course_id: courseId,
       student_id: student._id.toString(),
-      image: buffer.toString('base64'),
+      image: smallBuf.toString('base64'),
     });
-    if (!verifyResponse.ok) {
-      const error = verifyResponse.data as { error?: string };
-      return jsonError(error.error || 'Face verification failed', verifyResponse.status);
+
+    let matched = false;
+    if (pyRes.ok) {
+      const v = pyRes.data as { distance: number; matched: boolean };
+      matched = v.matched;
+    } else {
+      /* --- fallback: inline verification --- */
+      const profile = await db.collection('face_profiles').findOne({ student_id: student._id });
+      if (!profile) return jsonError('Face profile not registered for student', 404);
+
+      const descriptor = await computeDescriptor(smallBuf);
+      if (!descriptor) return jsonError('No clear face found', 400);
+
+      const distance = euclideanDistance(descriptor, (profile.descriptor as number[]) || []);
+      matched = distance <= MATCH_THRESHOLD;
     }
 
-    const verification = verifyResponse.data as { distance: number; matched: boolean };
-    if (!verification.matched) {
+    if (!matched) {
       return jsonError('Face match failed. Please retry with clear frame.', 401);
     }
 

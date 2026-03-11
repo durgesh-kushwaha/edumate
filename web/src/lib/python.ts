@@ -1,5 +1,5 @@
 const PY_SERVICE_URL = process.env.PY_ATTENDANCE_URL || 'http://127.0.0.1:8010';
-const PY_SERVICE_TIMEOUT_MS = Number(process.env.PY_ATTENDANCE_TIMEOUT_MS || 15000);
+const PY_SERVICE_TIMEOUT_MS = Number(process.env.PY_ATTENDANCE_TIMEOUT_MS || 25000);
 
 type PythonResponse = {
   ok: boolean;
