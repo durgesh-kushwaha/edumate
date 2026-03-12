@@ -46,7 +46,7 @@ def run():
             '$set': {
                 'employee_code': 'EMP-001',
                 'designation': 'Assistant Professor',
-                'department': 'Computer Science',
+                'department': 'BTech - Computer Science',
                 'faculty_phone': '9876543210',
                 'updated_at': utc_now(),
             },
@@ -61,7 +61,7 @@ def run():
         {
             '$set': {
                 'enrollment_number': '2026001',
-                'department': 'Computer Science',
+                'department': 'BTech - Computer Science',
                 'year': 2,
                 'gender': 'Male',
                 'student_phone': '9999999999',
@@ -191,10 +191,10 @@ def run():
     )
 
     db.exam_schedules.update_one(
-        {'department': 'Computer Science', 'semester': 4, 'subject_code': 'CS201'},
+        {'department': 'BTech - Computer Science', 'semester': 4, 'subject_code': 'CS201'},
         {
             '$set': {
-                'department': 'Computer Science',
+                'department': 'BTech - Computer Science',
                 'semester': 4,
                 'subject_code': 'CS201',
                 'subject_title': 'Data Structures',
@@ -208,10 +208,10 @@ def run():
         upsert=True,
     )
     db.exam_schedules.update_one(
-        {'department': 'Computer Science', 'semester': 4, 'subject_code': 'CS202'},
+        {'department': 'BTech - Computer Science', 'semester': 4, 'subject_code': 'CS202'},
         {
             '$set': {
-                'department': 'Computer Science',
+                'department': 'BTech - Computer Science',
                 'semester': 4,
                 'subject_code': 'CS202',
                 'subject_title': 'Database Management Systems',

@@ -4,7 +4,7 @@ import { hashPassword } from './auth';
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017';
 const MONGODB_DB = process.env.MONGODB_DB || 'eduvision_nexus_v2';
-const APP_SETUP_VERSION = 6;
+const APP_SETUP_VERSION = 7;
 const APP_SETUP_DOC_ID = 'edumate-web-setup';
 const SUPERADMIN_SEED_EMAIL = (process.env.SEED_SUPERADMIN_EMAIL || 'superadmin@edumate.local').trim().toLowerCase();
 const SUPERADMIN_SEED_PASSWORD = process.env.SEED_SUPERADMIN_PASSWORD || DEFAULT_PASSWORD;
@@ -78,14 +78,14 @@ function maxSemesterFromYear(yearValue: unknown) {
 }
 
 const SEMESTER_SUBJECT_TEMPLATES: Record<number, string[]> = {
-  1: ['Foundations of Computing', 'Applied Mathematics I', 'Professional Communication'],
-  2: ['Programming Fundamentals', 'Applied Mathematics II', 'Engineering Science Lab'],
-  3: ['Object Oriented Programming', 'Discrete Structures', 'Data Communication Basics'],
-  4: ['Data Structures', 'Database Systems', 'Operating Systems'],
-  5: ['Software Engineering', 'Web Engineering', 'Computer Networks'],
-  6: ['Cloud Computing', 'Machine Learning Basics', 'Open Elective'],
-  7: ['Advanced Algorithms', 'Project Phase I', 'Domain Elective'],
-  8: ['Project Phase II', 'Professional Ethics', 'Industry Seminar'],
+  1: ['Foundation Course I', 'General English', 'Environmental Studies'],
+  2: ['Foundation Course II', 'Communication Skills', 'General Elective I'],
+  3: ['Core Subject I', 'Core Subject II', 'Skill Development'],
+  4: ['Core Subject III', 'Core Subject IV', 'General Elective II'],
+  5: ['Advanced Core I', 'Elective I', 'Practical / Project I'],
+  6: ['Advanced Core II', 'Elective II', 'Practical / Project II'],
+  7: ['Specialization I', 'Project Phase I', 'Seminar'],
+  8: ['Specialization II', 'Project Phase II', 'Professional Ethics'],
 };
 
 function generatedSemesterCourseCode(departmentCode: string, semester: number, index: number) {
@@ -247,7 +247,7 @@ async function ensureDefaultUsersAndData() {
         user_id: teacherUserRecordId,
         employee_code: seed.employee_code,
         designation: seed.designation,
-        department: 'Computer Science',
+        department: 'BTech - Computer Science',
         faculty_phone: seed.faculty_phone,
         created_at: now(),
         updated_at: now(),
@@ -260,7 +260,7 @@ async function ensureDefaultUsersAndData() {
           $set: {
             employee_code: seed.employee_code,
             designation: seed.designation,
-            department: 'Computer Science',
+            department: 'BTech - Computer Science',
             faculty_phone: seed.faculty_phone,
             updated_at: now(),
           },
@@ -301,7 +301,7 @@ async function ensureDefaultUsersAndData() {
     const inserted = await db.collection('students').insertOne({
       user_id: studentUserId,
       enrollment_number: '2026001',
-      department: 'Computer Science',
+      department: 'BTech - Computer Science',
       year: 2,
       gender: 'Male',
       student_phone: '9999999999',
@@ -457,7 +457,7 @@ async function ensureDefaultUsersAndData() {
 
   if (studentId) {
     const studentProfile = await db.collection('students').findOne({ _id: studentId });
-    const departmentName = String(studentProfile?.department || 'Computer Science');
+    const departmentName = String(studentProfile?.department || 'BTech - Computer Science');
     const studentMaxSemester = maxSemesterFromYear(studentProfile?.year || 2);
 
     await db.collection('hall_tickets').deleteMany({ student_id: studentId, semester: { $gt: studentMaxSemester } });
