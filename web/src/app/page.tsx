@@ -393,6 +393,8 @@ function AdminSuperPortal({
   });
   const [decisionRemarks, setDecisionRemarks] = useState<Record<string, string>>({});
   const [departmentPopupCode, setDepartmentPopupCode] = useState('');
+  const [courseDept, setCourseDept] = useState('');
+  const [courseSem, setCourseSem] = useState<number | null>(null);
   const [studentEditForm, setStudentEditForm] = useState<Dict | null>(null);
   const [facultyEditForm, setFacultyEditForm] = useState<Dict | null>(null);
   const [facultyCourseMap, setFacultyCourseMap] = useState<Record<string, string>>({});
@@ -1240,33 +1242,98 @@ function AdminSuperPortal({
             </article>
 
             <article className="card">
-              <h2>Courses</h2>
-              <div className="table-wrap">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Code</th>
-                      <th>Title</th>
-                      <th>Department</th>
-                      <th>Semester</th>
-                      <th>Credits</th>
-                      <th>Faculty</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {courses.map((course: Dict) => (
-                      <tr key={course.id}>
-                        <td>{course.code}</td>
-                        <td>{course.title}</td>
-                        <td>{course.department || '-'}</td>
-                        <td>{course.semester}</td>
-                        <td>{course.credits}</td>
-                        <td>{course.faculty_name}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <nav className="breadcrumb">
+                <button type="button" className={`breadcrumb-item${!courseDept ? ' active' : ''}`} onClick={() => { setCourseDept(''); setCourseSem(null); }}>
+                  All Departments
+                </button>
+                {courseDept && (
+                  <>
+                    <span className="breadcrumb-sep">/</span>
+                    <button type="button" className={`breadcrumb-item${courseSem === null ? ' active' : ''}`} onClick={() => setCourseSem(null)}>
+                      {courseDept}
+                    </button>
+                  </>
+                )}
+                {courseSem !== null && (
+                  <>
+                    <span className="breadcrumb-sep">/</span>
+                    <span className="breadcrumb-item active">Semester {courseSem}</span>
+                  </>
+                )}
+              </nav>
+
+              {/* Level 1: Department cards */}
+              {!courseDept && (() => {
+                const deptNames = [...new Set(courses.map((c: Dict) => String(c.department || 'Unassigned')))].sort();
+                return (
+                  <div className="department-grid top-gap">
+                    {deptNames.map((name) => {
+                      const deptCourses = courses.filter((c: Dict) => String(c.department || 'Unassigned') === name);
+                      const semesters = [...new Set(deptCourses.map((c: Dict) => Number(c.semester || 0)))].sort((a, b) => a - b);
+                      return (
+                        <button key={name} type="button" className="department-card-btn" onClick={() => setCourseDept(name)}>
+                          <strong>{name}</strong>
+                          <span>{deptCourses.length} courses</span>
+                          <p>{semesters.length} semester{semesters.length !== 1 ? 's' : ''}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+
+              {/* Level 2: Semester cards for selected department */}
+              {courseDept && courseSem === null && (() => {
+                const deptCourses = courses.filter((c: Dict) => String(c.department || 'Unassigned') === courseDept);
+                const semesters = [...new Set(deptCourses.map((c: Dict) => Number(c.semester || 0)))].sort((a, b) => a - b);
+                return (
+                  <div className="department-grid top-gap">
+                    {semesters.map((sem) => {
+                      const semCourses = deptCourses.filter((c: Dict) => Number(c.semester) === sem);
+                      return (
+                        <button key={sem} type="button" className="department-card-btn" onClick={() => setCourseSem(sem)}>
+                          <strong>Semester {sem}</strong>
+                          <span>{semCourses.length} subject{semCourses.length !== 1 ? 's' : ''}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+
+              {/* Level 3: Subjects table for selected semester */}
+              {courseDept && courseSem !== null && (() => {
+                const semCourses = courses.filter(
+                  (c: Dict) => String(c.department || 'Unassigned') === courseDept && Number(c.semester) === courseSem,
+                );
+                return (
+                  <div className="table-wrap top-gap">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>Code</th>
+                          <th>Subject</th>
+                          <th>Credits</th>
+                          <th>Faculty</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {semCourses.map((course: Dict) => (
+                          <tr key={course.id}>
+                            <td>{course.code}</td>
+                            <td>{course.title}</td>
+                            <td>{course.credits}</td>
+                            <td>{course.faculty_name}</td>
+                          </tr>
+                        ))}
+                        {semCourses.length === 0 && (
+                          <tr><td colSpan={4} style={{ textAlign: 'center', padding: '24px' }}>No subjects found</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
             </article>
           </section>
         )}

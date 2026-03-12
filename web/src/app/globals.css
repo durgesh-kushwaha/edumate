@@ -263,6 +263,41 @@ a {
   gap: 16px;
 }
 
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.breadcrumb-item {
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 0.92rem;
+  color: #1468df;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.breadcrumb-item:hover:not(.active) {
+  background: #e8f0fe;
+}
+
+.breadcrumb-item.active {
+  color: #0f2b56;
+  cursor: default;
+  font-weight: 600;
+}
+
+.breadcrumb-sep {
+  color: #8da2c4;
+  font-size: 0.85rem;
+  user-select: none;
+}
+
 .card {
   background: linear-gradient(150deg, #ffffff, #f6faff);
   border: 1px solid #c7d7f2;
