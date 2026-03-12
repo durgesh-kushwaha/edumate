@@ -1,7 +1,8 @@
-import { getDb, oid, toPublic } from '@/lib/db';
+import { ensureDbSetup, getDb, oid, toPublic } from '@/lib/db';
 import { currentUser, jsonOk } from '@/lib/http';
 
 export async function GET() {
+  await ensureDbSetup();
   const user = await currentUser();
   if (!user) {
     return jsonOk({ user: null }, 200);

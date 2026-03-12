@@ -182,25 +182,19 @@ export async function GET() {
 
       const courses = await db.collection('courses').find({ faculty_id: faculty._id }).sort({ semester: 1 }).toArray();
       const courseIds = courses.map((item) => item._id);
-      const assignments = await db
-        .collection('assignments')
-        .find({ course_id: { $in: courseIds } })
-        .sort({ created_at: -1 })
-        .toArray();
-      const econtents = courseIds.length
-        ? await db.collection('econtents').find({ course_id: { $in: courseIds } }).sort({ created_at: -1 }).toArray()
-        : [];
-      const notices = await db
-        .collection('notices')
-        .find({
-          $or: [{ target_roles: 'all' }, { target_roles: 'teacher' }, { created_by: user._id }],
-        })
-        .sort({ created_at: -1 })
-        .limit(100)
-        .toArray();
-      const facultyDepartmentDoc = (await db.collection('departments').findOne({
-        name: String(faculty.department || ''),
-      })) as Record<string, unknown> | null;
+
+      // Parallel batch: all queries that depend only on courseIds/faculty/user
+      const [assignments, econtents, notices, facultyDepartmentDoc, teacherExtraClassRows, activeSessions, enrollmentRows, results] = await Promise.all([
+        db.collection('assignments').find({ course_id: { $in: courseIds } }).sort({ created_at: -1 }).toArray(),
+        courseIds.length ? db.collection('econtents').find({ course_id: { $in: courseIds } }).sort({ created_at: -1 }).toArray() : Promise.resolve([]),
+        db.collection('notices').find({ $or: [{ target_roles: 'all' }, { target_roles: 'teacher' }, { created_by: user._id }] }).sort({ created_at: -1 }).limit(100).toArray(),
+        db.collection('departments').findOne({ name: String(faculty.department || '') }) as Promise<Record<string, unknown> | null>,
+        db.collection('extra_classes').find({ created_by: user._id }).sort({ class_date: 1, class_time: 1 }).limit(120).toArray(),
+        db.collection('attendance_sessions').find({ is_active: true }).sort({ started_at: -1 }).toArray(),
+        db.collection('enrollments').find({ course_id: { $in: courseIds } }).toArray(),
+        courseIds.length ? db.collection('results').find({ course_id: { $in: courseIds } }).sort({ updated_at: -1 }).toArray() : Promise.resolve([]),
+      ]);
+
       const facultyDepartmentTimetable = Array.isArray(facultyDepartmentDoc?.timetable)
         ? (facultyDepartmentDoc.timetable as Array<Record<string, unknown>>)
         : [];
@@ -236,12 +230,6 @@ export async function GET() {
           };
         })
         .filter((entry) => entry !== null) as Array<Record<string, unknown>>;
-      const teacherExtraClassRows = await db
-        .collection('extra_classes')
-        .find({ created_by: user._id })
-        .sort({ class_date: 1, class_time: 1 })
-        .limit(120)
-        .toArray();
       const teacherTodayExtraClasses = teacherExtraClassRows
         .filter((entry) => String(entry.class_date || '') === teacherTodayDate)
         .map((entry) => ({
@@ -264,25 +252,26 @@ export async function GET() {
         (a, b) => classTimeSortKey(a.class_time) - classTimeSortKey(b.class_time),
       );
 
-      const activeSessions = await db.collection('attendance_sessions').find({ is_active: true }).sort({ started_at: -1 }).toArray();
-      const enrollmentRows = await db.collection('enrollments').find({ course_id: { $in: courseIds } }).toArray();
+      // Parallel batch 2: queries depending on batch 1 results
       const studentIds = enrollmentRows
         .map((item) => item.student_id)
         .filter((value) => value instanceof ObjectId) as ObjectId[];
-      const students = studentIds.length ? await db.collection('students').find({ _id: { $in: studentIds } }).toArray() : [];
+      const [students, submissions] = await Promise.all([
+        studentIds.length ? db.collection('students').find({ _id: { $in: studentIds } }).toArray() : Promise.resolve([]),
+        assignments.length ? db.collection('assignment_submissions').find({ assignment_id: { $in: assignments.map((item) => item._id) } }).sort({ submitted_at: -1 }).toArray() : Promise.resolve([]),
+      ]);
       const studentUserIds = students
         .map((item) => item.user_id)
         .filter((value) => value instanceof ObjectId) as ObjectId[];
       const studentUsers = studentUserIds.length ? await db.collection('users').find({ _id: { $in: studentUserIds } }).toArray() : [];
-      const submissions = assignments.length
-        ? await db.collection('assignment_submissions').find({ assignment_id: { $in: assignments.map((item) => item._id) } }).sort({ submitted_at: -1 }).toArray()
-        : [];
-      const results = courseIds.length
-        ? await db.collection('results').find({ course_id: { $in: courseIds } }).sort({ updated_at: -1 }).toArray()
-        : [];
+
+      const courseById = new Map(courses.map((c) => [String(c._id), c]));
+      const studentById = new Map(students.map((s) => [String(s._id), s]));
+      const studentUserById = new Map(studentUsers.map((u) => [String(u._id), u]));
+      const assignmentById = new Map(assignments.map((a) => [String(a._id), a]));
 
       const assignmentsWithCourse = assignments.map((assignment) => {
-        const course = courses.find((item) => item._id.toString() === assignment.course_id.toString());
+        const course = courseById.get(String(assignment.course_id));
         return {
           ...(toPublic(assignment) as Record<string, unknown>),
           course_code: course?.code || '',
@@ -291,7 +280,7 @@ export async function GET() {
       });
 
       const econtentWithCourse = econtents.map((entry) => {
-        const course = courses.find((item) => item._id.toString() === entry.course_id.toString());
+        const course = courseById.get(String(entry.course_id));
         return {
           ...(toPublic(entry) as Record<string, unknown>),
           course_code: course?.code || '',
@@ -299,10 +288,11 @@ export async function GET() {
         };
       });
 
+      const courseIdSet = new Set(courses.map((c) => String(c._id)));
       const sessions = activeSessions
-        .filter((session) => courses.some((course) => course._id.toString() === session.course_id.toString()))
+        .filter((session) => courseIdSet.has(String(session.course_id)))
         .map((session) => {
-          const course = courses.find((item) => item._id.toString() === session.course_id.toString());
+          const course = courseById.get(String(session.course_id));
           return {
             ...(toPublic(session) as Record<string, unknown>),
             course_code: course?.code || '',
@@ -311,9 +301,9 @@ export async function GET() {
         });
 
       const courseStudents = enrollmentRows.map((entry) => {
-        const course = courses.find((item) => String(item._id) === String(entry.course_id));
-        const student = students.find((item) => String(item._id) === String(entry.student_id));
-        const studentUser = student ? studentUsers.find((item) => String(item._id) === String(student.user_id)) : null;
+        const course = courseById.get(String(entry.course_id));
+        const student = studentById.get(String(entry.student_id));
+        const studentUser = student ? studentUserById.get(String(student.user_id)) : null;
         return {
           id: `${String(entry.course_id)}:${String(entry.student_id)}`,
           course_id: String(entry.course_id),
@@ -327,10 +317,10 @@ export async function GET() {
       });
 
       const enrichedSubmissions = submissions.map((submission) => {
-        const assignment = assignments.find((item) => String(item._id) === String(submission.assignment_id));
-        const course = assignment ? courses.find((item) => String(item._id) === String(assignment.course_id)) : null;
-        const student = students.find((item) => String(item._id) === String(submission.student_id));
-        const studentUser = student ? studentUsers.find((item) => String(item._id) === String(student.user_id)) : null;
+        const assignment = assignmentById.get(String(submission.assignment_id));
+        const course = assignment ? courseById.get(String(assignment.course_id)) : null;
+        const student = studentById.get(String(submission.student_id));
+        const studentUser = student ? studentUserById.get(String(student.user_id)) : null;
         return {
           ...(toPublic(submission) as Record<string, unknown>),
           assignment_title: assignment?.title || '',
@@ -343,9 +333,9 @@ export async function GET() {
       });
 
       const enrichedResults = results.map((result) => {
-        const course = courses.find((item) => String(item._id) === String(result.course_id));
-        const student = students.find((item) => String(item._id) === String(result.student_id));
-        const studentUser = student ? studentUsers.find((item) => String(item._id) === String(student.user_id)) : null;
+        const course = courseById.get(String(result.course_id));
+        const student = studentById.get(String(result.student_id));
+        const studentUser = student ? studentUserById.get(String(student.user_id)) : null;
         return {
           ...(toPublic(result) as Record<string, unknown>),
           course_code: course?.code || '',
@@ -381,11 +371,22 @@ export async function GET() {
 
     const enrollments = await db.collection('enrollments').find({ student_id: student._id }).toArray();
     const courseIds = enrollments.map((item) => item.course_id).filter((value) => value instanceof ObjectId) as ObjectId[];
-    const courses = await db.collection('courses').find({ _id: { $in: courseIds } }).toArray();
 
-    const attendanceHistory = await db.collection('attendance').find({ student_id: student._id }).sort({ attendance_date: -1 }).toArray();
+    const [courses, attendanceHistory, fees, activeSessions, econtentRows, noticeRows] = await Promise.all([
+      db.collection('courses').find({ _id: { $in: courseIds } }).toArray(),
+      db.collection('attendance').find({ student_id: student._id }).sort({ attendance_date: -1 }).toArray(),
+      db.collection('fee_ledgers').find({ student_id: student._id }).sort({ due_date: 1 }).toArray(),
+      db.collection('attendance_sessions').find({ is_active: true, allow_student_mark: true, course_id: { $in: courseIds } }).toArray(),
+      courseIds.length
+        ? db.collection('econtents').find({ course_id: { $in: courseIds } }).sort({ created_at: -1 }).toArray()
+        : Promise.resolve([]),
+      db.collection('notices').find({ $or: [{ target_roles: 'all' }, { target_roles: 'student' }] }).sort({ created_at: -1 }).limit(150).toArray(),
+    ]);
+
+    const courseMap = new Map(courses.map((c) => [String(c._id), c]));
+
     const attendanceHistoryPayload = attendanceHistory.map((record) => {
-      const course = courses.find((item) => item._id.toString() === record.course_id.toString());
+      const course = courseMap.get(String(record.course_id));
       return {
         ...(toPublic(record) as Record<string, unknown>),
         course_code: course?.code || '',
@@ -397,36 +398,18 @@ export async function GET() {
     const presentCount = attendanceHistory.filter((item) => item.status === 'present').length;
     const totalTrackedRecords = attendanceHistory.length;
 
-    const fees = await db.collection('fee_ledgers').find({ student_id: student._id }).sort({ due_date: 1 }).toArray();
     const pendingFeeTotal = fees
       .filter((item) => String(item.status || 'pending') !== 'paid')
       .reduce((sum, item) => sum + Number(item.amount || 0), 0);
 
-    const activeSessions = await db
-      .collection('attendance_sessions')
-      .find({ is_active: true, allow_student_mark: true, course_id: { $in: courseIds } })
-      .toArray();
     const activeSessionsPayload = activeSessions.map((session) => {
-      const course = courses.find((item) => item._id.toString() === session.course_id.toString());
+      const course = courseMap.get(String(session.course_id));
       return {
         ...(toPublic(session) as Record<string, unknown>),
         course_code: course?.code || '',
         course_title: course?.title || '',
       };
     });
-
-    const econtentRows = courseIds.length
-      ? await db.collection('econtents').find({ course_id: { $in: courseIds } }).sort({ created_at: -1 }).toArray()
-      : [];
-
-    const noticeRows = await db
-      .collection('notices')
-      .find({
-        $or: [{ target_roles: 'all' }, { target_roles: 'student' }],
-      })
-      .sort({ created_at: -1 })
-      .limit(150)
-      .toArray();
 
     const courseIdSet = new Set(courseIds.map((item) => item.toString()));
     const notices = noticeRows

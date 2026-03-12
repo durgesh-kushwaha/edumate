@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { AUTH_COOKIE, verifyToken } from './auth';
-import { ensureDbSetup, getDb, oid, toPublic } from './db';
+import { getDb, oid, toPublic } from './db';
 import type { Role } from './types';
 
 export function jsonOk(payload: unknown, status = 200) {
@@ -17,7 +17,6 @@ export async function currentUser() {
   if (!token) {
     return null;
   }
-  await ensureDbSetup();
   const payload = verifyToken(token);
   if (!payload) {
     return null;

@@ -4336,8 +4336,11 @@ export default function HomePage() {
   async function boot() {
     try {
       setLoading(true);
-      const me = await apiJson<Dict>('/api/auth/me').catch(() => ({ user: null }));
-      await loadDepartments();
+      const [me, deptPayload] = await Promise.all([
+        apiJson<Dict>('/api/auth/me').catch(() => ({ user: null })),
+        apiJson<Department[]>('/api/catalog/departments').catch(() => []),
+      ]);
+      setDepartments(Array.isArray(deptPayload) ? deptPayload : []);
       if (me.user) {
         await loadAppState();
       } else {
